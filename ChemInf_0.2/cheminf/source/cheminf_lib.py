@@ -71,7 +71,7 @@ class ChemInfData(object):
             if self.args.config is not None:
                 self.config_file = self.args.config
             else:
-                self.config_file = "{amcp_path}/config/classifiers.ini".format(amcp_path=self.path)
+                self.config_file = "{cheminf_path}/config/classifiers.ini".format(cheminf_path=self.path)
         self.config = ChemInfConfig(self.args.classifier, self.config_file)
         self.config_file = self.args.config
 
@@ -105,9 +105,9 @@ class ChemInfData(object):
         and the name of the file to be outputted from the script.
         """
 
-        parser = argparse.ArgumentParser(prog="AMCP")
+        parser = argparse.ArgumentParser(prog="cheminf")
 
-        parser_command = parser.add_subparsers(help="Choose a mode to run AMCP in", dest='mode')
+        parser_command = parser.add_subparsers(help="Choose a mode to run cheminf in", dest='mode')
 
         parser_build = parser_command.add_parser('build',
                                                  help="Builds a model with specific classifier")
@@ -161,7 +161,7 @@ class ChemInfData(object):
                           parser_utils_split, parser_utils_trim]:
             subparser.add_argument('-o', '--out_file',
                                    help="Specify the output file with path. If it's not specified for \'predict\' "
-                                        "then it will be sat to default (data/amcp_predictions)")
+                                        "then it will be sat to default (data/cheminf_predictions)")
 
         for subparser in [parser_validate, parser_utils_split]:
             subparser.add_argument('-o2', '--out_file2',
@@ -172,7 +172,7 @@ class ChemInfData(object):
                                    help="Specify the path to the directory "
                                         "where the generated models should be stored for 'build' "
                                         "or 'predict'). Otherwise it will be the default model directory "
-                                        "(data/amcp_models).")
+                                        "(data/cheminf_models).")
 
         for subparser in [parser_build, parser_improve, parser_predict, parser_validate,
                           parser_utils_resample, parser_utils_split, parser_utils_trim]:

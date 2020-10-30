@@ -17,7 +17,7 @@ class ChemInfModel(object):
         self.name = database.args.name
         self.mode = database.args.mode
         if not database.args.models_dir:
-            self.models_dir = f"{self.path}/data/amcp_models/{self.name}"
+            self.models_dir = f"{self.path}/data/cheminf_models/{self.name}"
         else:
             self.models_dir = database.args.models_dir
         try:
@@ -27,8 +27,8 @@ class ChemInfModel(object):
             pass
         if hasattr(database.args, 'out_file'):
             if not database.args.out_file:
-                self.out_file = f"{self.path}/data/amcp_predictions/{self.name}/" \
-                                f"amcp_{self.name}_{self.type}_{self.mode}.csv"
+                self.out_file = f"{self.path}/data/cheminf_predictions/{self.name}/" \
+                                f"cheminf_{self.name}_{self.type}_{self.mode}.csv"
             else:
                 self.out_file = database.args.out_file
             try:
@@ -48,7 +48,7 @@ class ChemInfModel(object):
     def save_models(self, model=None, iteration=0):
         if model is None:
             model = self.classifier.architecture
-        model_name = f"{self.models_dir}/amcp_{self.name}_{self.type}_m{iteration}.z"
+        model_name = f"{self.models_dir}/cheminf_{self.name}_{self.type}_m{iteration}.z"
         if os.path.isfile(model_name):
             os.remove(model_name)
         with open(model_name, mode='ab') as f:
@@ -58,7 +58,7 @@ class ChemInfModel(object):
         if model is None:
             model = self.classifier.architecture
         for c, alpha_c in enumerate(model.cali_nonconf_scores(calibration_data)):
-            model_score = f"{self.models_dir}/amcp_{self.name}_{self.type}_calibration-α{c}_m{iteration}.z"
+            model_score = f"{self.models_dir}/cheminf_{self.name}_{self.type}_calibration-α{c}_m{iteration}.z"
             if os.path.isfile(model_score):
                 os.remove(model_score)
             with open(model_score, mode='ab') as f:
@@ -66,11 +66,11 @@ class ChemInfModel(object):
 
     def load_models(self):
         dir_files = os.listdir(self.models_dir)
-        nr_models = sum([1 for f in dir_files if f.startswith(f"amcp_{self.name}_{self.type}_m")])
+        nr_models = sum([1 for f in dir_files if f.startswith(f"cheminf_{self.name}_{self.type}_m")])
         models = []
         print(f"Loading models from {self.models_dir}")
         for i in range(nr_models):
-            model_file = f"{self.models_dir}/amcp_{self.name}_{self.type}_m{i}.z"
+            model_file = f"{self.models_dir}/cheminf_{self.name}_{self.type}_m{i}.z"
             with open(model_file, 'rb') as f:
                 models.append(cloudpickle.load(f))
 
@@ -87,7 +87,7 @@ class ChemInfModel(object):
         print(f"Loading scores from {self.models_dir}")
         for i in range(nr_models):
             for c in range(nr_class):
-                score_file = f"{self.models_dir}/amcp_{self.name}_{self.type}_calibration-α{c}_m{i}.z"
+                score_file = f"{self.models_dir}/cheminf_{self.name}_{self.type}_calibration-α{c}_m{i}.z"
                 with open(score_file, 'rb') as f:
                     scores[c].append(cloudpickle.load(f))
 
@@ -112,7 +112,7 @@ class ModelRNDFOR(ChemInfModel):
 
     def build(self):
         """Trains NR_MODELS models and saves them as compressed files
-        in the AMCP_MODELS_PATH directory along with the calibration
+        in the cheminf_MODELS_PATH directory along with the calibration
         conformity scores.
         """
         from source.cheminf_data_utils import shuffle_arrays_in_unison, read_array
@@ -159,7 +159,7 @@ class ModelRNDFOR(ChemInfModel):
         nrow = self.config.pred_nrow  # To control memory.
 
         dir_files = os.listdir(self.models_dir)
-        nr_of_models = sum([1 for f in dir_files if f.startswith(f"amcp_{self.name}_rndfor")])
+        nr_of_models = sum([1 for f in dir_files if f.startswith(f"cheminf_{self.name}_rndfor")])
 
         # Initializing list of pointers to model objects
         #  and calibration conformity score lists.
@@ -195,7 +195,7 @@ class ModelRNDFOR(ChemInfModel):
             p_c_array = np.empty((nrow, nr_of_models, nr_class), dtype=float)
 
             class_string = "\t".join(['p(%d)' % c for c in range(nr_class)])
-            fout.write(f"amcp_prediction\tpredict_file:\"{self.in_file}\"\n"
+            fout.write(f"cheminf_prediction\tpredict_file:\"{self.in_file}\"\n"
                        f"sampleID\treal_class\t{class_string}\n")
             print(f"Allocated memory for an {nrow} X {ncol} array.")
 
@@ -286,12 +286,12 @@ class ModelRNDFOR(ChemInfModel):
         # Out file(s).
         fout_test = open(self.out_file, 'w+')
         class_string = "\t".join(['p(%d)' % c for c in range(nr_class)])
-        fout_test.write(f"amcp_validation\ttest_samples\tvalidation_file:\"{self.in_file}\"\n"
+        fout_test.write(f"cheminf_validation\ttest_samples\tvalidation_file:\"{self.in_file}\"\n"
                         f"sampleID\treal_class\t{class_string}\n")
 
         if self.out_file_train:
             fout_train = open(self.out_file_train, 'w+')
-            fout_train.write(f"amcp_validation\ttrain_samples\tvalidation_file:\"{self.in_file}\"\n"
+            fout_train.write(f"cheminf_validation\ttrain_samples\tvalidation_file:\"{self.in_file}\"\n"
                              f"sampleID\treal_class\t{class_string}\n")
 
         for k in range(val_folds):
@@ -387,8 +387,8 @@ class ModelNN(ChemInfModel):
     def __init__(self, database):
         super(ModelNN, self).__init__(database, 'nn')
         global read_dataframe
-        _temp = __import__("source", globals(), locals(), ['amcp_data_utils.read_dataframe'])
-        read_dataframe = _temp.amcp_data_utils.read_dataframe
+        _temp = __import__("source", globals(), locals(), ['cheminf_data_utils.read_dataframe'])
+        read_dataframe = _temp.cheminf_data_utils.read_dataframe
     def make_train_test_dataset(self):
         from source.cheminf_data_utils import cut_file
         train_test_ratio = self.config.train_test_ratio
