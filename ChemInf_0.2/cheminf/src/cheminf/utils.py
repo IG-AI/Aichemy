@@ -1,14 +1,18 @@
 import argparse
 import configparser
 import os
+import re
 import time
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
-from .cheminf_data_utils import ChemInfUtils
-from .cheminf_models import ModelRNDFOR, ModelNN
+from cheminf.preprocessing import ChemInfPostProc
+from cheminf.models import ModelRNDFOR, ModelNN
+
+from src.cheminf.preprocessing import shuffle_dataframe
 
 
 class ChemInfConfig(object):
@@ -49,7 +53,7 @@ class ChemInfConfig(object):
             raise ValueError("Config mode doesn't exist")
 
 
-class ChemInfData(object):
+class ChemInfDataBase(object):
     path = None
     args = None
     config = None
@@ -71,7 +75,7 @@ class ChemInfData(object):
             if self.args.config is not None:
                 self.config_file = self.args.config
             else:
-                self.config_file = "{cheminf_path}/config/classifiers.ini".format(cheminf_path=self.path)
+                self.config_file = "{path}/config/classifiers.ini".format(path=self.path)
         self.config = ChemInfConfig(self.args.classifier, self.config_file)
         self.config_file = self.args.config
 
@@ -109,6 +113,15 @@ class ChemInfData(object):
 
         parser_command = parser.add_subparsers(help="Choose a mode to run cheminf in", dest='mode')
 
+        parser_build = parser_command.add_parser('auto',
+                                                 help="Automatic mode that preforms a complete data analysis of a "
+                                                      "dataset. The dataset is split in train/test sets with a certain "
+                                                      "percentage defined in the classifier config file. The train set"
+                                                      "will be used to train model(s) and the test set will"
+                                                      "be used to for prediction on the created models. This prediction"
+                                                      " will then be used to make a summary of the model(s) performance"
+                                                      "and graphs will be created based out if the result.")
+
         parser_build = parser_command.add_parser('build',
                                                  help="Builds a model with specific classifier")
 
@@ -121,19 +134,26 @@ class ChemInfData(object):
         parser_validate = parser_command.add_parser('validate',
                                                     help="Preforms cross-validation on a classifier model")
 
-        parser_utils = parser_command.add_parser('utils',
-                                                 help="Preforms various data operations")
+        parser_postproc = parser_command.add_parser('pre-proc',
+                                                    help="Preforms various post precessing operations")
 
-        parser_utils_mode = parser_utils.add_subparsers(help="Choose a data utility mode to run", dest='utils_mode')
+        parser_preproc_mode = parser_postproc.add_subparsers(help="Choose a preprocessing mode to preform",
+                                                             dest='preproc-mode')
 
-        parser_utils_resample = parser_utils_mode.add_parser('resample',
-                                                             help="Resample a datasets and saves it")
+        parser_postproc = parser_command.add_parser('post-proc',
+                                                    help="Preforms various post precessing operations")
 
-        parser_utils_split = parser_utils_mode.add_parser('split',
-                                                          help="Splits a dataset and saves it")
+        parser_postproc_mode = parser_postproc.add_subparsers(help="Choose a post processing mode to preform",
+                                                              dest='postproc-mode')
 
-        parser_utils_trim = parser_utils_mode.add_parser('trim',
-                                                         help="Trims a datasets and saves it")
+        parser_postproc_resample = parser_postproc_mode.add_parser('resample',
+                                                                   help="Resample a datasets and saves it")
+
+        parser_postproc_split = parser_postproc_mode.add_parser('split',
+                                                                help="Splits a dataset and saves it")
+
+        parser_postproc_trim = parser_postproc_mode.add_parser('trim',
+                                                               help="Trims a datasets and saves it")
 
         for subparser in [parser_build, parser_improve, parser_predict, parser_validate]:
             subparser.add_argument('-cl', '--classifier',
@@ -142,7 +162,7 @@ class ChemInfData(object):
                                    help="Choose the underlying classifier")
 
         for subparser in [parser_build, parser_improve, parser_predict, parser_validate,
-                          parser_utils_resample, parser_utils_split, parser_utils_trim]:
+                          parser_postproc_resample, parser_postproc_split, parser_postproc_trim]:
             subparser.add_argument('-i', '--in_file',
                                    required=True,
                                    help="(For 'build, 'validate', 'predict') "
@@ -151,19 +171,19 @@ class ChemInfData(object):
         date = datetime.now()
         current_date = date.strftime("%d-%m-%Y")
         for subparser in [parser_build, parser_improve, parser_predict, parser_validate,
-                          parser_utils_resample, parser_utils_split, parser_utils_trim]:
+                          parser_postproc_resample, parser_postproc_split, parser_postproc_trim]:
             subparser.add_argument('-n', '--name',
                                    default=current_date,
                                    help="Name of the current project, to which all out_puts "
                                         "will use as prefixes or in subdirectories with that name.")
 
-        for subparser in [parser_predict, parser_validate, parser_utils_resample,
-                          parser_utils_split, parser_utils_trim]:
+        for subparser in [parser_predict, parser_validate, parser_postproc_resample,
+                          parser_postproc_split, parser_postproc_trim]:
             subparser.add_argument('-o', '--out_file',
                                    help="Specify the output file with path. If it's not specified for \'predict\' "
-                                        "then it will be sat to default (data/cheminf_predictions)")
+                                        "then it will be sat to default (data/predictions)")
 
-        for subparser in [parser_validate, parser_utils_split]:
+        for subparser in [parser_validate, parser_postproc_split]:
             subparser.add_argument('-o2', '--out_file2',
                                    help="Specify the second output file.")
 
@@ -172,16 +192,16 @@ class ChemInfData(object):
                                    help="Specify the path to the directory "
                                         "where the generated models should be stored for 'build' "
                                         "or 'predict'). Otherwise it will be the default model directory "
-                                        "(data/cheminf_models).")
+                                        "(data/models).")
 
         for subparser in [parser_build, parser_improve, parser_predict, parser_validate,
-                          parser_utils_resample, parser_utils_split, parser_utils_trim]:
+                          parser_postproc_resample, parser_postproc_split, parser_postproc_trim]:
             subparser.add_argument('-pc', '--percentage',
                                    help='Specify the split percentage.',
                                    type=float,
                                    default=0.5)
 
-        for subparser in [parser_utils_resample, parser_utils_split, parser_utils_trim]:
+        for subparser in [parser_postproc_resample, parser_postproc_split, parser_postproc_trim]:
             subparser.add_argument('-sh', '--shuffle',
                                    default=False,
                                    action='store_true',
@@ -193,12 +213,12 @@ class ChemInfData(object):
                                         "The file needs to have the exact same format "
                                         "as the internal configuration file")
 
-        for subparser in [parser_utils_resample]:
+        for subparser in [parser_postproc_resample]:
             subparser.add_argument('-ch', '--chunksize',
                                    type=int,
                                    help="Specify size of chunks the files should be divided into.")
 
-        for subparser in [parser_utils_resample]:
+        for subparser in [parser_postproc_resample]:
             subparser.add_argument('-nc', '--num_core',
                                    default=1,
                                    type=int,
@@ -222,10 +242,10 @@ class ChemInfData(object):
 
 class ChemInfOperator(object):
     def __init__(self):
-        self.database = ChemInfData()
+        self.database = ChemInfDataBase()
         self.mode = self.database.args.mode
         if self.mode == 'utils':
-            self.utils = ChemInfUtils(self.database)
+            self.utils = ChemInfPostProc(self.database)
         else:
             self.model = self.init_model(self.database)
 
@@ -243,7 +263,7 @@ class ChemInfOperator(object):
 
 class Timer(object):
     def __init__(self, func):
-        self.args = ChemInfData.get_args()
+        self.args = ChemInfDataBase.get_args()
         self.func = func
 
     def __call__(self, *args):
@@ -257,3 +277,115 @@ class Timer(object):
         print(f"Runtime for {self.func.__name__} was {run_time}s")
         if self.func.__name__ == "multicore":
             print(f"Runtime per core(s) with {self.func.__name__} was {(run_time * self.args.num_core)}s")
+
+
+def read_parameters(in_file, params_dict):
+    """ Reads a file with hyperparameters for the
+    classifier and parameters for the CP script. Updates the params_dict.
+    """
+
+    with open(in_file, 'r') as f:
+        for line in f:
+            items = line.strip().split()
+            assert len(items) == 2, \
+                "The parameter file should have one key value pair per line"
+            params_dict[items[0]] = items[1]
+
+
+def read_array(in_file, data_type):
+    """Reads a white space separated file without a header.
+    The first column contains the IDs of samples and the 2nd the class.
+    All the following columns contain features (the independent variables)
+    of the sample. The function first determines the size of the arrays to
+    be created, then inserts data into them.
+    """
+    print(f"Reading from '{in_file}'.")
+
+    # read (compressed) features
+    file_name, extension = os.path.splitext(in_file)
+    if extension == ".bz2":
+        import bz2
+        f = bz2.open(in_file, 'rb')
+    elif extension == ".gz":
+        import gzip
+        f = gzip.open(in_file, 'rb')
+    else:
+        f = open(in_file, 'r')
+
+    nrow = sum(1 for _ in f)
+    f.seek(0)
+    ncol = len(f.readline().split()) - 1  # Disregarding ID column.
+    f.seek(0)
+    # Initializing arrays.
+    print(f"Initializing array of size {nrow} X {ncol}.")
+    id = np.empty(nrow, dtype=np.dtype('U50'))
+    print(f"Memory of ID_array(str): {(id.nbytes * 10 ** (-6))} MB.")
+    if data_type == 'integer':
+        data = np.empty((nrow, ncol), dtype=int)
+    if data_type == 'float':
+        data = np.empty((nrow, ncol), dtype=float)
+    print(f"Memory of data_array: {(data.nbytes * 10 ** (-6))} MB.")
+
+    for i, line in enumerate(f):
+        if extension == ".bz2" or extension == ".gz":
+            line = line.decode()
+        sample_id, sample_data = line.strip().split(None, 1)
+        id[i] = sample_id
+        data[i] = sample_data.split()
+
+    print(f"Read {nrow} samples in total.\n")
+
+    # close file handle
+    f.close()
+
+    return id, data
+
+
+def read_dataframe(file, chunksize=None, shuffle=False):
+    print("\nReading from {file}".format(file=file))
+
+    with open(file) as f:
+        first_line = next(f)
+        line_data = re.split(" |\t|[|]", first_line)
+        num_cols = len(line_data)
+
+    unnamed_columns = [str(i) for i in range(1, num_cols - 1)]
+    columns_names = ['id', 'class'] + unnamed_columns
+
+    columns_types = {'id': 'string', 'class': 'int8'}
+    for i in range(1, (num_cols - 1)):
+        columns_types[str(i)] = 'int8'
+
+    if chunksize:
+        dataframe = pd.read_csv(file,
+                                sep='\s+',
+                                skip_blank_lines=True,
+                                header=None,
+                                names=columns_names,
+                                dtype=columns_types,
+                                chunksize=chunksize,
+                                iterator=True,
+                                engine='c')
+
+    else:
+        dataframe = pd.read_csv(file,
+                                sep='\s+',
+                                skip_blank_lines=True,
+                                header=None,
+                                names=columns_names,
+                                dtype=columns_types,
+                                engine='c')
+
+        if shuffle:
+            dataframe = shuffle_dataframe(dataframe)
+
+    return dataframe
+
+
+def save_dataframe(dataframe, out_file):
+    print(f"\nSave dataframe as csv to {out_file}")
+
+    dataframe.to_csv(out_file,
+                     index=False,
+                     header=False,
+                     sep='\t')

@@ -1,4 +1,4 @@
-from .cheminf_lib import Timer, ChemInfOperator
+from cheminf.utils import Timer, ChemInfOperator
 
 
 @Timer
