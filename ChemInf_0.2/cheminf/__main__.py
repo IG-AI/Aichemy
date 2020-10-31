@@ -21,7 +21,7 @@ __credits__ = "This frameworks random forest classifier is based on the cheminf_
     dynamic neural network, added data utils, completely changed to how the user interact with the framework to make it
     more user-friendly and added a setup script for easier installation of the framework.    
 """
-import source.cheminf_main
+import src.cheminf_main
 
 if __name__ == "__main__":
-    source.cheminf_main.main()
+    src.cheminf_main.main()

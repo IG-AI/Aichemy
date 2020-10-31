@@ -387,7 +387,7 @@ class ModelNN(ChemInfModel):
     def __init__(self, database):
         super(ModelNN, self).__init__(database, 'nn')
         global read_dataframe
-        _temp = __import__("source", globals(), locals(), ['cheminf_data_utils.read_dataframe'])
+        _temp = __import__("src", globals(), locals(), ['cheminf_data_utils.read_dataframe'])
         read_dataframe = _temp.cheminf_data_utils.read_dataframe
     def make_train_test_dataset(self):
         from .cheminf_data_utils import cut_file
