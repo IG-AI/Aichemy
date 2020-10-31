@@ -1,6 +1,6 @@
 __name__ = 'cheminf'
 __version__ = 0.2
-__author__ = "Daniel Ågtrand, Leonard Sparring"
+__authors__ = "Daniel Ågtrand, Leonard Sparring"
 __email__ = "d.e.agstrand@gmail.com, leo.sparring@gmail.com"
 __date__ = "30/10-2020"
 __contributors__ = "This frameworks random forest classifier is based on the cheminf_loop2_20.py aggregated mondrian " \
