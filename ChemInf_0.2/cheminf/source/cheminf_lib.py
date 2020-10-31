@@ -7,8 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
-from source.cheminf_data_utils import ChemInfUtils
-from source.cheminf_models import ModelRNDFOR, ModelNN
+from .cheminf_data_utils import ChemInfUtils
+from .cheminf_models import ModelRNDFOR, ModelNN
 
 
 class ChemInfConfig(object):

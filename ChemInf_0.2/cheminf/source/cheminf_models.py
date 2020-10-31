@@ -4,8 +4,8 @@ import sys
 import cloudpickle
 import numpy as np
 
-from source.cheminf_classifier import ChemInfClassifier
-from source.cheminf_data_utils import split_array
+from .cheminf_classifier import ChemInfClassifier
+from .cheminf_data_utils import split_array
 
 
 class ChemInfModel(object):
@@ -115,7 +115,7 @@ class ModelRNDFOR(ChemInfModel):
         in the cheminf_MODELS_PATH directory along with the calibration
         conformity scores.
         """
-        from source.cheminf_data_utils import shuffle_arrays_in_unison, read_array
+        from .cheminf_data_utils import shuffle_arrays_in_unison, read_array
 
         nr_models = self.config.nr_models
 
@@ -267,8 +267,8 @@ class ModelRNDFOR(ChemInfModel):
     def validate(self):
         """Cross validation using the K-fold method.
         """
-        from source.cheminf_data_utils import shuffle_arrays_in_unison
-        from source.cheminf_data_utils import read_array
+        from .cheminf_data_utils import shuffle_arrays_in_unison
+        from .cheminf_data_utils import read_array
 
         # Reading parameters
         nr_models = self.config.nr_models
@@ -390,7 +390,7 @@ class ModelNN(ChemInfModel):
         _temp = __import__("source", globals(), locals(), ['cheminf_data_utils.read_dataframe'])
         read_dataframe = _temp.cheminf_data_utils.read_dataframe
     def make_train_test_dataset(self):
-        from source.cheminf_data_utils import cut_file
+        from .cheminf_data_utils import cut_file
         train_test_ratio = self.config.train_test_ratio
         dataframe = read_dataframe(self.in_file)
         return cut_file(dataframe, train_test_ratio, shuffle=True, split=True)

@@ -1,31 +1,56 @@
-certifi==2020.6.20
-cloudpickle @ file:///tmp/build/80754af9/cloudpickle_1598884132938/work
-dataclasses==0.7
-h5-to-json==0.1.5
-h5json==1.1.3
-h5py==2.10.0
-joblib @ file:///tmp/build/80754af9/joblib_1601912903842/work
-mkl-fft==1.2.0
-mkl-random==1.1.0
-mkl-service==2.3.0
-numexpr==2.7.1
-numpy==1.18.4
-olefile==0.46
-pandas @ file:///tmp/build/80754af9/pandas_1602088135163/work
-Pillow @ file:///tmp/build/80754af9/pillow_1602788709045/work
-protobuf==3.13.0
-pymongo==3.10.1
-python-dateutil==2.8.1
-pytz==2020.1
-scikit-learn @ file:///tmp/build/80754af9/scikit-learn_1598379690588/work
-scipy @ file:///tmp/build/80754af9/scipy_1597686625380/work
-six==1.14.0
-skorch @ file:///home/conda/feedstock_root/build_artifacts/skorch_1591873157816/work
-tables==3.6.1
-tabulate==0.8.7
-tensorboardX @ file:///home/conda/feedstock_root/build_artifacts/tensorboardx_1594067496847/work
-threadpoolctl @ file:///tmp/tmp9twdgx9k/threadpoolctl-2.1.0-py3-none-any.whl
-torch==1.7.0
-torchvision==0.8.1
-tqdm @ file:///tmp/build/80754af9/tqdm_1602185206534/work
-typing-extensions @ file:///tmp/build/80754af9/typing_extensions_1598376058250/work
+blas>=1.0
+ca-certificates>=2020.10.0
+certifi>=2020.6.20
+cloudpickle>=1.5.0
+cudatoolkit>=11.0.0
+dataclasses>=0.7
+freetype>=2.10.0
+intel-openmp>=2020.0
+joblib>=0.17.0
+lcms2>=2.0
+ld_impl_linux-64>=2.33.0
+libedit>=3.1.0
+libffi>=3.0
+libgcc-ng>=9.1.0
+libgfortran-ng>=7.3.0
+libpng>=1.6.0
+libprotobuf>=3.13.0.0
+libstdcxx-ng>=9.1.0
+libtiff>=4.1.0
+libuv>=1.40.0
+lz4-c>=1.9.0
+mkl>=2019.0
+mkl-service>=2.3.0
+mkl_fft>=1.2.0
+mkl_random>=1.1.0
+ncurses>=6.0
+ninja>=1.10.0
+numpy>=1.19.0
+numpy-base>=1.19.0
+olefile>=0.46
+openssl>=1.1.0
+pandas>=1.1.0
+pillow>=8.0.0
+pip>=20.0.0
+python~=3.8
+python-dateutil>=2.8.0
+pytorch>=1.7.0
+pytz>=2020.0
+readline>=8.0
+scikit-learn>=0.23.0
+scipy>=1.5.0
+setuptools>=38.3.0
+six>=1.15.0
+skorch==0.8.0
+sqlite>=3.33.0
+tabulate>=0.8.0
+tensorboardx>=2.1
+threadpoolctl>=2.1.0
+tk>=8.6.10
+torchvision>=0.8.0
+tqdm>=4.51.0
+typing_extensions>=3.7.4.0
+wheel>=0.35.0
+xz>=5.2.0
+zlib>=1.2.0
+zstd>=1.4.5.0
