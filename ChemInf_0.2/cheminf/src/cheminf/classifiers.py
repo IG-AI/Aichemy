@@ -7,6 +7,7 @@ from sklearn.base import clone
 from sklearn.ensemble import RandomForestClassifier
 from torch.nn import Module as NNModule
 
+CLASSIFIER_TYPES = ['rndfor', 'nn']
 
 class ChemInfClassifier(object):
     def __init__(self, classifier_type, config):
@@ -41,13 +42,16 @@ class ChemInfClassifier(object):
 
     def reset(self):
         self.architecture.reset()
+        return self.architecture
 
 
 class ClassifierRF(RandomForestClassifier):
     """Inherits from RandomForestClassifier"""
     def __init__(self, smooth=True):
         super(ClassifierRF, self).__init__()
+        # noinspection PyGlobalUndefined
         global bisect_right
+        # noinspection PyGlobalUndefined
         global bisect_left
         _temp = __import__('bisect', globals(), locals(), ['bisect_right', 'bisect_left'])
         bisect_right = _temp.bisect_right
@@ -109,6 +113,7 @@ class ClassifierRF(RandomForestClassifier):
 class ClassifierNN(NNModule, ABC):
     def __init__(self, dim_in: int, dim_hidden: list, dim_out: int, dropout: float):
         super(ClassifierNN, self).__init__()
+        # noinspection PyGlobalUndefined
         global nn
         _temp = __import__('torch', globals(), locals(), ['nn'])
         nn = _temp.nn

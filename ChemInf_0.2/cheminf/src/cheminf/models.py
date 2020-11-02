@@ -4,53 +4,38 @@ import sys
 import cloudpickle
 import numpy as np
 
-from cheminf.classifiers import ChemInfClassifier
-from cheminf.preprocessing import split_array
-
-import src.cheminf.utils
+from src.cheminf.classifiers import ChemInfClassifier
+from src.cheminf.preprocessing import split_array, ChemInfPreProc
+from src.cheminf.operator import read_dataframe
 
 
 class ChemInfModel(object):
-    def __init__(self, database, model_type):
-        self.in_file = database.args.in_file
-        self.type = model_type
-        self.path = database.path
-        self.config = database.config
-        self.name = database.args.name
-        self.mode = database.args.mode
-        if not database.args.models_dir:
-            self.models_dir = f"{self.path}/data/models/{self.name}"
+    def __init__(self, controller, model_type):
+        if controller.args.mode == ['auto']:
+            preproc = ChemInfPreProc(controller)
+            datasets = preproc.run_auto()
+            self.train_set = datasets['train']
+            self.test_set = datasets['test']
+            self.auto_mode = True
+
         else:
-            self.models_dir = database.args.models_dir
-        try:
-            os.mkdir(self.models_dir)
-            print(f"Created the model directory: {self.models_dir}")
-        except FileExistsError:
-            pass
-        if hasattr(database.args, 'out_file'):
-            if not database.args.out_file:
-                self.out_file = f"{self.path}/data/predictions/{self.name}/" \
-                                f"{self.name}_{self.type}_{self.mode}.csv"
-            else:
-                self.out_file = database.args.out_file
-            try:
-                os.mkdir(os.path.dirname(self.out_file))
-                print(f"Created the model directory: {os.path.dirname(self.out_file)}")
-            except FileExistsError:
-                pass
+            self.in_file = controller.args.in_file
+            self.auto_mode = False
+        self.type = model_type
+        self.out_file = controller.pred_files[model_type]
+        self.config = controller.config.classifier
+        self.project_name = controller.project_name
+        self.models_dir = controller.models_dir
         self.classifier = ChemInfClassifier(self.type, self.config)
 
-    def improve(self):
-        if self.build():
-            models = self.load_models()
-            self.build(models)
-        else:
-            raise NotImplementedError("The the improve method needs to be inherent to work")
+    def update_datasets(self, datasets):
+        self.train_set = datasets['train']
+        self.test_set = datasets['test']
 
     def save_models(self, model=None, iteration=0):
         if model is None:
             model = self.classifier.architecture
-        model_name = f"{self.models_dir}/{self.name}_{self.type}_m{iteration}.z"
+        model_name = f"{self.models_dir}/{self.project_name}_{self.type}_m{iteration}.z"
         if os.path.isfile(model_name):
             os.remove(model_name)
         with open(model_name, mode='ab') as f:
@@ -60,7 +45,7 @@ class ChemInfModel(object):
         if model is None:
             model = self.classifier.architecture
         for c, alpha_c in enumerate(model.cali_nonconf_scores(calibration_data)):
-            model_score = f"{self.models_dir}/{self.name}_{self.type}_calibration-α{c}_m{iteration}.z"
+            model_score = f"{self.models_dir}/{self.project_name}_{self.type}_calibration-α{c}_m{iteration}.z"
             if os.path.isfile(model_score):
                 os.remove(model_score)
             with open(model_score, mode='ab') as f:
@@ -68,11 +53,11 @@ class ChemInfModel(object):
 
     def load_models(self):
         dir_files = os.listdir(self.models_dir)
-        nr_models = sum([1 for f in dir_files if f.startswith(f"{self.name}_{self.type}_m")])
+        nr_models = sum([1 for f in dir_files if f.startswith(f"{self.project_name}_{self.type}_m")])
         models = []
         print(f"Loading models from {self.models_dir}")
         for i in range(nr_models):
-            model_file = f"{self.models_dir}/{self.name}_{self.type}_m{i}.z"
+            model_file = f"{self.models_dir}/{self.project_name}_{self.type}_m{i}.z"
             with open(model_file, 'rb') as f:
                 models.append(cloudpickle.load(f))
 
@@ -89,21 +74,28 @@ class ChemInfModel(object):
         print(f"Loading scores from {self.models_dir}")
         for i in range(nr_models):
             for c in range(nr_class):
-                score_file = f"{self.models_dir}/{self.name}_{self.type}_calibration-α{c}_m{i}.z"
+                score_file = f"{self.models_dir}/{self.project_name}_{self.type}_calibration-α{c}_m{i}.z"
                 with open(score_file, 'rb') as f:
                     scores[c].append(cloudpickle.load(f))
 
         print(f"Loaded {nr_models} x {nr_class} scores.")
         return scores, nr_class
 
-    def get(self):
-        return self.classifier.get()
-
     def create_new(self):
         return self.classifier.new()
 
     def reset(self):
-        self.classifier.reset()
+        return self.classifier.reset()
+
+    def get(self, key):
+        return getattr(self, key)
+
+    def _choice_input(self, label):
+        if self.auto_mode:
+            dataset = getattr(self, label)
+        else:
+            dataset = self.in_file
+        return dataset
 
 
 class ModelRNDFOR(ChemInfModel):
@@ -112,23 +104,27 @@ class ModelRNDFOR(ChemInfModel):
         if hasattr(database.args, 'out_file2'):
             self.out_file_train = database.args.out_file2
 
-    def build(self):
+    def build(self, models=None):
         """Trains NR_MODELS models and saves them as compressed files
         in the MODELS_PATH directory along with the calibration
         conformity scores.
         """
-        from cheminf.preprocessing import shuffle_arrays_in_unison, read_array
+        from src.cheminf.preprocessing import shuffle_arrays_in_unison
+        from src.cheminf.operator import read_array
 
         nr_models = self.config.nr_models
-
         prop_train_ratio = self.config.prop_train_ratio
         data_type = self.config.data_type
 
-        training_id, training_data = read_array(self.in_file, data_type)
+        train_set = self._choice_input('train_set')
+
+        training_id, training_data = read_array(train_set, data_type)
         nr_of_training_samples = len(training_id)
         for model_iteration in range(nr_models):
-            self.reset()
-            model = self.classifier.architecture
+            if models is None:
+                model = self.reset()
+            else:
+                model = models[model_iteration]
             # Shuffling the sample_IDs and data of the training
             #  set in unison, without creating copies.
             shuffle_arrays_in_unison(training_id, training_data)
@@ -146,6 +142,10 @@ class ModelRNDFOR(ChemInfModel):
             # Retrieving the calibration conformity scores.
             self.save_scores(calibration_data, model_iteration)
 
+    def improve(self):
+        models = self.load_models()
+        self.build(models)
+
     def predict(self):
         """Reads the pickled models and calibration conformity scores.
         Initializes a fixed size numpy array. Reads in nrow lines of the
@@ -157,11 +157,13 @@ class ModelRNDFOR(ChemInfModel):
         if not os.path.isdir(out_file_path):
             os.mkdir(out_file_path)
 
+        test_set = self._choice_input('test_set')
+
         # Reading parameters
         nrow = self.config.pred_nrow  # To control memory.
 
         dir_files = os.listdir(self.models_dir)
-        nr_of_models = sum([1 for f in dir_files if f.startswith(f"{self.name}_rndfor")])
+        nr_of_models = sum([1 for f in dir_files if f.startswith(f"{self.project_name}_rndfor")])
 
         # Initializing list of pointers to model objects
         #  and calibration conformity score lists.
@@ -169,15 +171,15 @@ class ModelRNDFOR(ChemInfModel):
         calibration_alphas_c, nr_class = self.load_scores()
 
         # read (compressed) features
-        file_name, extension = os.path.splitext(self.in_file)
+        file_name, extension = os.path.splitext(test_set)
         if extension == '.bz2':
             import bz2
-            fin = bz2.open(self.in_file, 'rb')
+            fin = bz2.open(test_set, 'rb')
         elif extension == '.gz':
             import gzip
-            fin = gzip.open(self.in_file, 'rb')
+            fin = gzip.open(test_set, 'rb')
         else:
-            fin = open(self.in_file, 'r')
+            fin = open(test_set, 'r')
 
         with open(os.path.join(out_file_path, out_file), 'w+') as fout:
             # Getting dimensions for np.array allocation.
@@ -197,7 +199,7 @@ class ModelRNDFOR(ChemInfModel):
             p_c_array = np.empty((nrow, nr_of_models, nr_class), dtype=float)
 
             class_string = "\t".join(['p(%d)' % c for c in range(nr_class)])
-            fout.write(f"prediction\tpredict_file:\"{self.in_file}\"\n"
+            fout.write(f"prediction\tpredict_file:\"{test_set}\"\n"
                        f"sampleID\treal_class\t{class_string}\n")
             print(f"Allocated memory for an {nrow} X {ncol} array.")
 
@@ -266,11 +268,12 @@ class ModelRNDFOR(ChemInfModel):
                                f"{p_c_string}\n")
         fin.close()
 
+    # noinspection PyUnboundLocalVariable,PyUnboundLocalVariable,PyUnboundLocalVariable
     def validate(self):
         """Cross validation using the K-fold method.
         """
-        from cheminf.preprocessing import shuffle_arrays_in_unison
-        from cheminf.preprocessing import read_array
+        from src.cheminf.preprocessing import shuffle_arrays_in_unison
+        from src.cheminf.operator import read_array
 
         # Reading parameters
         nr_models = self.config.nr_models
@@ -319,8 +322,7 @@ class ModelRNDFOR(ChemInfModel):
             print(f"Allocated memory for array.")
 
             for model_iteration in range(nr_models):
-                self.reset()
-                model = self.classifier.architecture
+                model = self.reset()
                 # Shuffling the sample_IDs and data of the training
                 #  set in unison, without creating copies.
                 shuffle_arrays_in_unison(training_id, training_data)
@@ -388,16 +390,14 @@ class ModelRNDFOR(ChemInfModel):
 class ModelNN(ChemInfModel):
     def __init__(self, database):
         super(ModelNN, self).__init__(database, 'nn')
-        global read_dataframe
-        _temp = __import__("src", globals(), locals(), ['data_utils.read_dataframe'])
-        read_dataframe = src.cheminf.utils.read_dataframe
+
     def make_train_test_dataset(self):
-        from cheminf.preprocessing import cut_file
+        from src.cheminf.preprocessing import cut_file
         train_test_ratio = self.config.train_test_ratio
         dataframe = read_dataframe(self.in_file)
         return cut_file(dataframe, train_test_ratio, shuffle=True, split=True)
 
-    def build(self):
+    def build(self, models=None):
         import torch
         from skorch import NeuralNetClassifier
         from skorch.callbacks import EarlyStopping, EpochScoring
@@ -410,7 +410,9 @@ class ModelNN(ChemInfModel):
         from libs.nonconformist.nc import ClassifierNc, MarginErrFunc
         from libs.torchtools.optim import RangerLars
 
-        train_dataframe = read_dataframe(self.in_file)
+        test_set = self._choice_input('train_set')
+
+        train_dataframe = read_dataframe(test_set)
         nr_models = self.config.nr_models
         val_ratio = self.config.val_ratio
         cal_ratio = self.config.cal_ratio
@@ -423,8 +425,10 @@ class ModelNN(ChemInfModel):
         y = np.array(train_dataframe['class']).astype(np.int64)
 
         for i in range(nr_models):
-            self.reset()
-            classifier = self.classifier.architecture
+            if models is None:
+                classifier = self.reset()
+            else:
+                classifier = models[i]
 
             # Setup proper training, calibration and validation sets
 
@@ -484,10 +488,15 @@ class ModelNN(ChemInfModel):
 
             self.save_models(model=icp, iteration=i)
 
+    def improve(self):
+        models = self.load_models()
+        self.build(models)
+
     def predict(self):
         import pandas as pd
 
-        test_dataframe = read_dataframe(self.in_file)
+        test_set = self._choice_input('test_set')
+        test_dataframe = read_dataframe(test_set)
         nr_models = self.config.nr_models
         sig = self.config.pred_sig
 
@@ -516,12 +525,11 @@ class ModelNN(ChemInfModel):
         results_dataframe.to_csv(self.out_file, sep='\t', mode='w+', index=False, header=True)
 
     def validate(self):
-        return None
+        raise NotImplementedError("Validation for neural network models aren't implemented yet.")
 
 
 def minus_bacc(net, X=None, y=None):
     from sklearn.metrics import balanced_accuracy_score
-
     y_true = y
     y_pred = net.predict(X)
     return -balanced_accuracy_score(y_true, y_pred)

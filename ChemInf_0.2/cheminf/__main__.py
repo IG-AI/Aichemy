@@ -22,7 +22,8 @@ __contributors__ = "This frameworks random forest classifier is based on the che
     dynamic neural network, added data utils, completely changed to how the user interact with the framework to make it
     more user-friendly and added a setup script for easier installation of the framework.    
 """
-import src.cheminf_main
+from src.cheminf.operator import run_operator
+
 
 if __name__ == "__main__":
-    src.cheminf_main.main()
+    run_operator()
