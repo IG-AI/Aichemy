@@ -173,7 +173,7 @@ class ChemInfInput(object):
 
 
 class ChemInfConfig(object):
-    def __init__(self, operator_mode, classifier_type, config_files, overreader):
+    def __init__(self, operator_mode, classifier_type, config_files, overrider):
         self.clf_conf_file = config_files[0]
         self.exec_conf_file = config_files[1]
         self.execute = ConfigExec(operator_mode, self.exec_conf_file)
@@ -181,6 +181,7 @@ class ChemInfConfig(object):
             self.classifier = ConfigClf(classifier_type, self.clf_conf_file)
         else:
             self.classifier = None
+        self.update_config(overrider)
 
     def update_config(self, overrider):
         new_configs = overrider.split(';')
