@@ -3,6 +3,7 @@ import argparse
 import os
 from datetime import datetime
 
+from ..cheminf.utils import boolean
 from ..cheminf.classifiers import CLASSIFIER_TYPES
 
 MODEL_MODES = ['build', 'improve', 'predict', 'validate']
@@ -24,9 +25,11 @@ class ChemInfInput(object):
         for flag in OCCASIONAL_FLAGS:
             if not hasattr(self.args, flag):
                 setattr(self.args, flag, None)
+
         for mode in SUBMODES:
             if not hasattr(self.args, mode):
                 setattr(self.args, mode, None)
+
         self.config = ChemInfConfig(self.args.mode, self.args.classifier, config_file, self.args.override_config)
 
     @staticmethod
@@ -68,8 +71,8 @@ class ChemInfInput(object):
         parser_preproc_mode = parser_preproc.add_subparsers(help="Choose a post processing mode to preform",
                                                             dest='preproc_mode')
 
-        parser_preproc_resample = parser_preproc_mode.add_parser('resample',
-                                                                 help="Resample a datasets and saves it")
+        parser_preproc_balancing = parser_preproc_mode.add_parser('balancing',
+                                                                 help="Balancing a datasets and saves it")
 
         parser_preproc_split = parser_preproc_mode.add_parser('split',
                                                               help="Splits a dataset and saves it")
@@ -89,7 +92,7 @@ class ChemInfInput(object):
         parser_postproc_plot = parser_postproc_mode.add_parser('plot',
                                                                help="Choose a preprocessing mode to preform")
         all_parsers = [parser_auto, parser_build, parser_improve, parser_predict,
-                       parser_validate, parser_preproc_resample, parser_preproc_split, parser_preproc_trim,
+                       parser_validate, parser_preproc_balancing, parser_preproc_split, parser_preproc_trim,
                        parser_postproc_summary, parser_postproc_plot]
 
         for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate]:
@@ -112,7 +115,7 @@ class ChemInfInput(object):
                                    help="Name of the current project, to which all out_puts "
                                         "will use as prefixes or in subdirectories with that name.")
 
-        for subparser in [parser_predict, parser_validate, parser_preproc_resample,
+        for subparser in [parser_predict, parser_validate, parser_preproc_balancing,
                           parser_preproc_split, parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]:
             subparser.add_argument('-o', '--outfile',
                                    default=None,
@@ -153,17 +156,17 @@ class ChemInfInput(object):
                                         "0 and 1.")
 
         for subparser in all_parsers:
-            subparser.add_argument('-cfg', '--override_config',
+            subparser.add_argument('-cf', '--override_config',
                                    default=None,
                                    help="Specify a parameter in the configuration that will to be override ")
 
-        for subparser in [parser_auto, parser_preproc_resample]:
+        for subparser in [parser_auto, parser_preproc_balancing]:
             subparser.add_argument('-ch', '--chunksize',
                                    default=100000,
                                    type=int,
                                    help="Specify size of chunks the files should be divided into.")
 
-        for subparser in [parser_preproc_resample, parser_preproc_split, parser_preproc_trim]:
+        for subparser in [parser_preproc_balancing, parser_preproc_split, parser_preproc_trim]:
             subparser.add_argument('-nc', '--nr_core',
                                    default=1,
                                    type=int,
@@ -172,8 +175,8 @@ class ChemInfInput(object):
         args = parser.parse_args()
 
         if hasattr(args, 'utils_mode'):
-            if args.utils_mode == 'resample' and hasattr(args, 'num_core') and not hasattr(args, 'chunksize'):
-                parser.error("Utils resample multicore mode has to be executed with chunking.")
+            if args.utils_mode == 'balancing' and hasattr(args, 'num_core') and not hasattr(args, 'chunksize'):
+                parser.error("Utils balancing multicore mode has to be executed with chunking.")
 
             if (args.utils_mode == 'split' or args.utils_mode == 'trim') \
                     and (hasattr(args, 'num_core') or hasattr(args, 'chunksize')):
@@ -187,25 +190,35 @@ class ChemInfConfig(object):
         self.clf_conf_file = config_files[0]
         self.exec_conf_file = config_files[1]
         self.execute = ConfigExec(operator_mode, self.exec_conf_file)
+
         if operator_mode in AUTO_MODES or operator_mode in MODEL_MODES:
             self.classifier = ConfigClf(classifier_type, self.clf_conf_file)
         else:
             self.classifier = None
+
         if overrider is not None:
             self.update_config(overrider)
 
     def update_config(self, overrider):
-        new_configs = overrider.split(';')
+        new_configs = overrider.split(',')
         for config in new_configs:
-            key, value = config.split(',')
+            key, value = config.split(':')
             try:
-                value_type = type(getattr(self.classifier, key))
-                value = exec(value_type(value))
-                setattr(self.classifier, key, value)
-            except:
-                value_type = type(getattr(self.execute, key))
-                value = exec(value_type(value))
-                setattr(self.execute, key, value)
+                attr_pos = 'classifier'
+                old_value = getattr(self.classifier, key)
+            except AttributeError:
+                attr_pos = 'execute'
+                old_value = getattr(self.execute, key)
+            value_type = old_value.__class__.__name__
+
+            if f"{value_type}" == 'bool':
+                value_type = 'boolean'
+            elif f"{value_type}" == 'list':
+                value_type = 'config_to_list'
+            value = eval(f"{value_type}({value})")
+            obj = eval(f"self.{attr_pos}")
+            print(f"Changed configuration for '{key}' from '{old_value}' to '{value}'")
+            setattr(obj, key, value)
 
 
 class ConfigClf(object):
@@ -216,6 +229,7 @@ class ConfigClf(object):
         self.nr_models = int(config['all']['nr_models'])
 
         if classifier_type == 'rndfor' or classifier_type == 'all':
+            self.prop_train_ratio = float(config['random_forest']['prop_train_ratio'])
             self.nr_trees = int(config['random_forest']['nr_of_trees'])
             self.n_jobs = int(config['random_forest']['n_jobs'])
             self.pred_nrow = float(config['random_forest']['pred_nrow']),
@@ -227,7 +241,7 @@ class ConfigClf(object):
             self.val_ratio = float(config['neural_network']['val_ratio'])
             self.cal_ratio = float(config['neural_network']['cal_ratio'])
             self.dim_in = int(config['neural_network']['dim_in'])
-            self.dim_hidden = [int(x) for x in config['neural_network']['dim_hidden'].split(",")]
+            self.dim_hidden = config_to_list(config['neural_network']['dim_hidden'])
             self.dim_out = int(config['neural_network']['dim_out'])
             self.dropout = float(config['neural_network']['dropout'])
             self.batch_size = int(config['neural_network']['batch_size'])
@@ -240,9 +254,6 @@ class ConfigClf(object):
             except ValueError:
                 self.pred_sig = None
 
-        else:
-            raise ValueError("Config mode doesn't exist")
-
 
 class ConfigExec(object):
     def __init__(self, operator_mode, config_file):
@@ -250,7 +261,7 @@ class ConfigExec(object):
         config.read(config_file)
 
         if operator_mode == 'auto':
-            self.auto_plus_resample = boolean(config['auto']['auto+resample'])
+            self.auto_plus_balancing = boolean(config['auto']['auto+balancing'])
             self.auto_plus_sum = boolean(config['auto']['auto+sum'])
             self.auto_plus_plot = boolean(config['auto']['auto+plot'])
             self.train_test_ratio = float(config['auto']['train_test_ratio'])
@@ -258,7 +269,6 @@ class ConfigExec(object):
         if operator_mode == 'postproc' or operator_mode == 'auto':
             self.error_level = int(config['postproc']['error_level'])
             self.plot_del_sum = boolean(config['postproc']['plot_del_sum'])
-            print(self.plot_del_sum)
 
 
 class ChemInfController(ChemInfInput):
@@ -282,14 +292,18 @@ class ChemInfController(ChemInfInput):
         file_dir = os.path.dirname(os.path.abspath(__file__))
         package_dir = os.path.dirname(file_dir)
         self.src_dir = os.path.dirname(package_dir)
+
         config_files = [f"{self.src_dir}/config/classifiers.ini", f"{self.src_dir}/config/execute.ini"]
-        super().__init__(config_files)
+        super(ChemInfController, self).__init__(config_files)
         self.project_name = self.args.name
         self.update_infile()
+
         if self.args.mode in self.model_modes or self.args.mode in self.auto_modes:
             self.update_model_path()
+
         if self.args.mode in MODEL_MODES or self.args.mode == 'auto':
             self.add_predict_path()
+
         if self.args.mode == 'preproc' or self.args.mode == 'postproc' or self.args.mode == 'auto':
             self.update_outfile()
 
@@ -299,6 +313,7 @@ class ChemInfController(ChemInfInput):
                 infile = f"{self.src_dir}/data/predictions/{self.args.name}/{self.args.infile}"
             else:
                 infile = f"{self.src_dir}/data/{self.args.infile}"
+
             if os.path.isfile(infile):
                 self.args.infile = infile
             else:
@@ -312,12 +327,15 @@ class ChemInfController(ChemInfInput):
             if self.args.mode == 'preproc':
                 if self.args.preproc_mode == 'trim':
                     self.args.outfile = f"{self.src_dir}/data/{infile_name}_trimmed{infile_extension}"
-                elif self.args.preproc_mode == 'resample':
+
+                elif self.args.preproc_mode == 'balancing':
                     self.args.outfile = f"{self.src_dir}/data/{infile_name}_balanced{infile_extension}"
+
                 elif self.args.preproc_mode == 'split':
                     self.args.outfile = f"{self.src_dir}/data/{infile_name}_train{infile_extension}"
                     if not self.args.outfile2:
                         self.args.outfile2 = f"{self.src_dir}/data/{infile_name}_test{infile_extension}"
+
             elif self.args.mode == 'postproc':
                 self.args.outfile = f"{self.src_dir}/data/predictions/{self.project_name}/" \
                                     f"{infile_name}_summary{infile_extension}"
@@ -325,6 +343,7 @@ class ChemInfController(ChemInfInput):
     def update_model_path(self):
         if not self.args.models_dir:
             self.args.models_dir = f"{self.src_dir}/data/models/{self.project_name}"
+
         try:
             os.mkdir(self.args.models_dir)
             print(f"Created the model directory: {self.args.models_dir}")
@@ -368,5 +387,5 @@ class ChemInfController(ChemInfInput):
         return getattr(cls, key)
 
 
-def boolean(string):
-    return string.lower() in ("yes", "true", "t", "1")
+def config_to_list(config):
+    return [int(x) for x in config.split("|")]

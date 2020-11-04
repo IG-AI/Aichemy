@@ -5,21 +5,20 @@ import cloudpickle
 import numpy as np
 
 from ..cheminf.classifiers import ChemInfClassifier
-from ..cheminf.preprocessing import split_array, ChemInfPreProc
+from ..cheminf.preprocessing import ChemInfPreProc, split_array, cut_dataframe
 from ..cheminf.utils import read_dataframe
-
 
 class ChemInfModel(object):
     def __init__(self, controller, model_type):
         if controller.args.mode == 'auto':
             preproc = ChemInfPreProc(controller)
-            dataset = preproc.run()
-            self.train_set = dataset['train']
-            self.test_set = dataset['test']
+            paths = preproc.run()
+            self.paths = paths
             self.auto_mode = True
         else:
             self.infile = controller.args.infile
             self.auto_mode = False
+
         self.type = model_type
         self.outfile = controller.args.pred_files[model_type]
         self.config = controller.config.classifier
@@ -30,6 +29,7 @@ class ChemInfModel(object):
     def save_models(self, model=None, iteration=0):
         if model is None:
             model = self.classifier.architecture
+
         model_name = f"{self.models_dir}/{self.project_name}_{self.type}_m{iteration}.z"
         if os.path.isfile(model_name):
             os.remove(model_name)
@@ -39,6 +39,7 @@ class ChemInfModel(object):
     def save_scores(self, calibration_data, iteration=0, model=None):
         if model is None:
             model = self.classifier.architecture
+
         for c, alpha_c in enumerate(model.cali_nonconf_scores(calibration_data)):
             model_score = f"{self.models_dir}/{self.project_name}_{self.type}_calibration-α{c}_m{iteration}.z"
             if os.path.isfile(model_score):
@@ -67,6 +68,7 @@ class ChemInfModel(object):
         nr_class = int((nr_model_files / nr_models) - 1)
         scores = [list() for _ in range(nr_class)]
         print(f"Loading scores from {self.models_dir}")
+
         for i in range(nr_models):
             for c in range(nr_class):
                 score_file = f"{self.models_dir}/{self.project_name}_{self.type}_calibration-α{c}_m{i}.z"
@@ -87,10 +89,10 @@ class ChemInfModel(object):
 
     def _get_dataframe(self, label):
         if self.auto_mode:
-            datafile = getattr(self, label)
+            file_path = self.paths[label]
         else:
-            datafile = self.infile
-        dataframe = read_dataframe(datafile)
+            file_path = self.infile
+        dataframe = read_dataframe(file_path)
         return dataframe
 
 
@@ -106,17 +108,17 @@ class ModelRNDFOR(ChemInfModel):
         in the MODELS_PATH directory along with the calibration
         conformity scores.
         """
-        from ..cheminf.preprocessing import shuffle_arrays_in_unison
-        from ..cheminf.utils import read_array
+        from ..cheminf.utils import shuffle_arrays_in_unison
 
         nr_models = self.config.nr_models
         prop_train_ratio = self.config.prop_train_ratio
-        data_type = self.config.data_type
 
-        train_set = self._get_dataframe('train')
+        train_dataframe = self._get_dataframe('train')
 
-        training_id, training_data = read_array(train_set, data_type)
-        nr_of_training_samples = len(training_id)
+        train_id_dataframe, train_data_dataframe = cut_dataframe(train_dataframe, index=2, axis=1, split=True)
+        train_id = np.array([np.array(row.tolist()) for _, row in train_id_dataframe.iterrows()])
+        train_data = np.array([np.array(row.tolist()) for _, row in train_data_dataframe.iterrows()])
+        nr_of_training_samples = len(train_id)
         for model_iteration in range(nr_models):
             if models is None:
                 model = self.reset()
@@ -124,10 +126,10 @@ class ModelRNDFOR(ChemInfModel):
                 model = models[model_iteration]
             # Shuffling the sample_IDs and data of the training
             #  set in unison, without creating copies.
-            shuffle_arrays_in_unison(training_id, training_data)
+            shuffle_arrays_in_unison(train_id, train_data)
             # Splitting training data into proper train set and
             #  calibration set.
-            prop_train_data, calibration_data = split_array(training_data,
+            prop_train_data, calibration_data = split_array(train_data,
                                                             array_size=nr_of_training_samples,
                                                             percent_to_first=prop_train_ratio)
 
@@ -154,7 +156,9 @@ class ModelRNDFOR(ChemInfModel):
         if not os.path.isdir(outfile_path):
             os.mkdir(outfile_path)
 
-        test_set = self._get_dataframe('test')
+        test_dataframe = self._get_dataframe('test')
+        test_id, test_data = cut_dataframe(test_dataframe, index=2, split=True)
+        ncol = test_data.shape(1)
 
         # Reading parameters
         nrow = self.config.pred_nrow  # To control memory.
@@ -167,51 +171,24 @@ class ModelRNDFOR(ChemInfModel):
         models = self.load_models()
         calibration_alphas_c, nr_class = self.load_scores()
 
-        # read (compressed) features
-        file_name, extension = os.path.splitext(test_set)
-        if extension == '.bz2':
-            import bz2
-            fin = bz2.open(test_set, 'rb')
-        elif extension == '.gz':
-            import gzip
-            fin = gzip.open(test_set, 'rb')
-        else:
-            fin = open(test_set, 'r')
-
         with open(os.path.join(outfile_path, outfile), 'w+') as fout:
-            # Getting dimensions for np.array allocation.
-            if extension == '.gz' or extension == '.bz2':
-                ncol = len(fin.readline().decode().split()) - 1
-            else:
-                ncol = len(fin.readline().split()) - 1
-            fin.seek(0)
             sample_id = np.empty(nrow, dtype=np.dtype('U50'))
-            data_type = self.config.get('data_type')
-            if data_type == 'integer':
-                predict_data = np.empty((nrow, ncol), dtype=int)
-            elif data_type == 'float':
-                predict_data = np.empty((nrow, ncol), dtype=float)
+            predict_data = np.empty((nrow, ncol), dtype=int)
 
             # Three dimensional class array
             p_c_array = np.empty((nrow, nr_of_models, nr_class), dtype=float)
-
-            class_string = "\t".join(['p(%d)' % c for c in range(nr_class)])
-            fout.write(f"prediction\tpredict_file:\"{test_set}\"\n"
-                       f"sampleID\treal_class\t{class_string}\n")
             print(f"Allocated memory for an {nrow} X {ncol} array.")
 
-            for i, line in enumerate(fin):
+            for i, row in test_data.iterrows():
                 # Reading in nrow samples.
-                if extension == '.gz' or extension == '.bz2':
-                    line = line.decode()  # Bin to str conversion.
                 if i % nrow != nrow - 1:
                     # Inserting data from the infile into np.arrays.
                     (sample_id[i % nrow],
-                     sample_data) = line.strip().split(None, 1)
+                     sample_data) = row.strip().split(None, 1)
                     predict_data[i % nrow] = sample_data.split()
                 else:
                     (sample_id[i % nrow],
-                     sample_data) = line.strip().split(None, 1)
+                     sample_data) = row.strip().split(None, 1)
                     predict_data[i % nrow] = sample_data.split()
                     # The array has now been filled.
                     for model_index, model in enumerate(models):
@@ -263,13 +240,12 @@ class ModelRNDFOR(ChemInfModel):
                     fout.write(f"{sample_id[i]}\t"
                                f"{predict_data[i, 0]}\t"
                                f"{p_c_string}\n")
-        fin.close()
 
-    # noinspection PyUnboundLocalVariable,PyUnboundLocalVariable,PyUnboundLocalVariable
+    # Todo: Make validate mode work in current framework
     def validate(self):
         """Cross validation using the K-fold method.
         """
-        from ..cheminf.preprocessing import shuffle_arrays_in_unison
+        from .utils import shuffle_arrays_in_unison
         from ..cheminf.utils import read_array
 
         # Reading parameters
@@ -485,7 +461,7 @@ class ModelNN(ChemInfModel):
     def predict(self):
         import pandas as pd
 
-        test_dataframe = self._get_dataframe('test_set')
+        test_dataframe = self._get_dataframe('test')
         nr_models = self.config.nr_models
         sig = self.config.pred_sig
 
@@ -503,8 +479,7 @@ class ModelNN(ChemInfModel):
             pred = np.round(pred, 6).astype('str')
 
             p_value = {'P(0)': pred[:, 0].tolist(),
-                       'P(1)': pred[:, 1].tolist()
-                       }
+                       'P(1)': pred[:, 1].tolist()}
 
             p_value_results.append(pd.DataFrame(p_value).astype('float32'))
 

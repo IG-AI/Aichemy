@@ -8,53 +8,64 @@ import numpy as np
 class ChemInfPostProc(object):
     def __init__(self, controller):
         self.project_name = controller.args.name
-        self.mode = controller.args.postproc_mode
+        mode = controller.args.mode
+
+        if mode == 'postproc':
+            self.mode = controller.args.postproc_mode
+        elif mode == 'auto':
+            self.mode = mode
+        else:
+            raise ValueError("Post process can only be initialized in postproc and auto mode")
+
         self.classifier = controller.args.classifier
         self.error_level = controller.config.execute.error_level
         self.auto_plus_plot = (self.mode == 'auto' and controller.config.execute.auto_plus_plot)
         self.auto_plus_sum = (self.mode == 'auto' and controller.config.execute.auto_plus_sum)
         self.plot_del_sum = controller.config.execute.plot_del_sum
+
         if controller.args.significance:
             self.significance = controller.args.significance
         else:
             self.significance = None
+
         if self.mode == 'auto':
-            self.pred_files = controller.arg.pred_files
-            self.classifier_type = controller.classifier_type
-            self.nr_classifiers = len(controller.classifier_type)
+            self.pred_files = controller.args.pred_files
+            self.classifier_type = controller.classifier_types
+            self.nr_classifiers = len(controller.classifier_types)
             self.src_dir = controller.src_dir
         else:
             self.outfile = controller.args.outfile
             self.infile = controller.args.infile
 
     def run(self):
-        if self.mode == 'auto':
+        if self.mode == 'summary' or self.mode == 'plot':
+            files = [[self.infile, self.outfile]]
+
+        elif self.mode == 'auto':
             files = []
             if self.classifier == 'all':
                 classifiers = self.classifier_type
             else:
                 classifiers = [self.classifier]
+
             for classifier in classifiers:
                 outfile = (f"{self.src_dir}/data/predictions/{self.project_name}/"
-                           f"{self.project_name}_{classifier}_summary.csv")
+                           f"{self.project_name}_{classifier}_predict_summary.csv")
                 files.append([self.pred_files[classifier], outfile])
 
-        elif self.mode == 'summary' or self.mode == 'plot':
-            files = [[self.infile, self.outfile]]
         else:
             ValueError("Postproc mode not supported")
+
         if self.mode == 'summary' or self.auto_plus_sum:
             self.make_summary(files)
+
         if self.mode == 'plot' or self.auto_plus_plot:
             if self.auto_plus_sum:
                 del_sum = False
             elif self.mode == 'plot':
-                print('inne')
-                print(self.plot_del_sum)
                 del_sum = self.plot_del_sum
             else:
                 del_sum = True
-            print(del_sum)
             self.make_plot(files, del_sum)
 
     def make_summary(self, files):
@@ -87,7 +98,6 @@ def write_pred_summary_file(outfile, summary_array, significance_list):
     """Calculates standard ML metrics and CP metrics based on the
     set/class-counts. Writes a summary file.
     """
-    print(outfile)
     with open(outfile, 'w+') as fout:
         fout.write("significance\ttrue_pos\tfalse_pos\ttrue_neg\tfalse_neg\t"
                    "both_class0\tboth_class1\tnull_class0\tnull_class1\t"
@@ -179,7 +189,6 @@ def write_pred_summary_file(outfile, summary_array, significance_list):
 
 def set_prediction(p0, p1, significance):
     """Determines the classification set of a sample."""
-
     if p0 > significance:
         if p1 > significance:
             _set_prediction = '{0,1}'
@@ -216,16 +225,19 @@ def read_pred_file(infile, significance_list, error_level):
                         summary_array[i, 2] += 1  # true_neg
                     elif real_class == '1' or real_class == '1.0':
                         summary_array[i, 3] += 1  # false_neg
+
                 elif set_pred == '{0,1}':
                     if real_class == '0' or real_class == '0.0':
                         summary_array[i, 4] += 1  # both_class0
                     elif real_class == '1' or real_class == '1.0':
                         summary_array[i, 5] += 1  # both_class1
+
                 elif set_pred == '{}':
                     if real_class == '0' or real_class == '0.0':
                         summary_array[i, 6] += 1  # null_class0
                     elif real_class == '1' or real_class == '1.0':
                         summary_array[i, 7] += 1  # null_class1
+
                 elif set_pred == '{1}':
                     if real_class == '1' or real_class == '1.0':
                         summary_array[i, 0] += 1  # true_pos

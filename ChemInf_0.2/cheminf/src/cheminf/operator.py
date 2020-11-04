@@ -10,22 +10,21 @@ class ChemInfOperator(object):
         self.controller = ChemInfController()
         self.mode = self.controller.args.mode
         self.classifier = self.controller.args.classifier
+
         if self.mode == 'postproc':
             from ..cheminf.postprocessing import ChemInfPostProc
             self.postproc = ChemInfPostProc(self.controller)
+
         elif self.mode == 'preproc':
             from ..cheminf.preprocessing import ChemInfPreProc
             self.preproc = ChemInfPreProc(self.controller)
-        elif self.mode == 'auto':
-            if self.controller.config.execute.auto_plus_resample:
-                from ..cheminf.postprocessing import ChemInfPostProc
-                self.preproc = ChemInfPostProc(self.controller)
-            else:
-                self.preproc = None
 
+        elif self.mode == 'auto':
+            from ..cheminf.preprocessing import ChemInfPreProc
+            self.preproc = ChemInfPreProc(self.controller)
             if self.controller.config.execute.auto_plus_sum or self.controller.config.execute.auto_plus_plot:
-                from ..cheminf.preprocessing import ChemInfPreProc
-                self.postproc = ChemInfPreProc(self.controller)
+                from ..cheminf.postprocessing import ChemInfPostProc
+                self.postproc = ChemInfPostProc(self.controller)
             else:
                 self.postproc = None
 
@@ -34,13 +33,16 @@ class ChemInfOperator(object):
                 models = self.init_model(self.controller)
                 self.rndfor_model = models[0]
                 self.nn_model = models[1]
+
             else:
                 if self.controller.args.classifier == 'rndfor':
                     self.rndfor_model = self.init_model(self.controller)
                     self.nn_model = None
+
                 elif self.controller.args.classifier == 'nn':
                     self.nn_model = self.init_model(self.controller)
                     self.rndfor_model = None
+
                 else:
                     raise ValueError("Not a supported classifier")
 
@@ -51,27 +53,32 @@ class ChemInfOperator(object):
             from ..cheminf.models import ModelNN
             models = [ModelRNDFOR(controller), ModelNN(controller)]
             return models
+
         elif controller.args.classifier == 'rndfor':
             from ..cheminf.models import ModelRNDFOR
             model = ModelRNDFOR(controller)
+
         elif controller.args.classifier == 'nn':
             from ..cheminf.models import ModelNN
             model = ModelNN(controller)
+
         else:
             raise ValueError("Wrong classifier input, has to be either 'random_forest' or 'neural_network'")
+
         return model
 
     def get_model(self, classifier=None):
         if classifier is None:
             classifier = self.classifier
+
         return getattr(self, f"{classifier}_model")
 
     def get_utils(self, utils=None):
         if utils is None:
             utils = self.mode
+
         return getattr(self, utils)
 
-    # Todo: Debug auto-mode
     # Todo: Make classifier option 'all' functional
     def run(self):
         if self.classifier:
@@ -82,15 +89,19 @@ class ChemInfOperator(object):
         else:
             classifiers = [None]
 
-        if self.mode == 'auto':
+        if self.mode in self.controller.auto_modes:
             for classifier in classifiers:
                 model = self.get_model(classifier)
                 model.build()
                 model.predict()
+
+        if self.mode == 'postproc' or self.mode in self.controller.auto_modes:
+            print('Gör postproc!')
+            self.postproc.run()
+
         elif self.mode == 'preproc':
             self.preproc.run()
-        elif self.mode == 'postproc' or self.mode in self.controller.auto_modes:
-            self.postproc.run()
+
         elif self.mode in self.controller.model_modes:
             for classifier in classifiers:
                 model = self.get_model(classifier)
@@ -126,4 +137,3 @@ def run_operator():
 
 if __name__ == "__main__":
     run_operator()
-

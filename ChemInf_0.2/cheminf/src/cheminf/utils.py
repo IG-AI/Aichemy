@@ -118,3 +118,18 @@ def save_dataframe(dataframe, outfile):
 
 def shuffle_dataframe(dataframe):
     return dataframe.sample(frac=1, random_state=123, axis=0)
+
+
+def shuffle_arrays_in_unison(array_a, array_b, seed=None):
+    """This function shuffles two numpy arrays so that the indices
+    between them will still correspond to one another.
+    """
+    np.random.seed(seed)
+    rng_state = np.random.get_state()
+    np.random.shuffle(array_a)
+    np.random.set_state(rng_state)
+    np.random.shuffle(array_b)
+
+
+def boolean(_bool):
+    return f'{_bool}'.lower() in ("yes", "true", "t", "1")
