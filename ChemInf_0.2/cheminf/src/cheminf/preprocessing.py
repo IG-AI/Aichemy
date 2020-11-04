@@ -53,7 +53,7 @@ class ChemInfPreProc(object):
             self.mode = 'resample'
             self._single_thread(infile, outfile=file_path)
             self.mode = 'auto'
-            return _remove_name_sep(file_path)
+            return file_path
         else:
             self.mode = 'resample'
             dataframe = self._single_thread(infile, save=False)
