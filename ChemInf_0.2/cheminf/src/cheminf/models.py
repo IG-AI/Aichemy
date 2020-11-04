@@ -94,6 +94,7 @@ class ChemInfModel(object):
         return dataframe
 
 
+# Todo: Make it work in current framework, with dataframes
 class ModelRNDFOR(ChemInfModel):
     def __init__(self, database):
         super(ModelRNDFOR, self).__init__(database, 'rndfor')

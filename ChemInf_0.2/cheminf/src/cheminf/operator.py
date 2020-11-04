@@ -71,6 +71,8 @@ class ChemInfOperator(object):
             utils = self.mode
         return getattr(self, utils)
 
+    # Todo: Debug auto-mode
+    # Todo: Make classifier option 'all' functional
     def run(self):
         if self.classifier:
             if self.classifier == 'all':
