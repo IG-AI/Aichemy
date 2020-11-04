@@ -4,93 +4,117 @@ import numpy as np
 import pandas as pd
 from sklearn.utils import resample
 
-from src.cheminf.operator import read_dataframe, save_dataframe, remove_name_sep
+from ..cheminf.utils import read_dataframe, save_dataframe, shuffle_dataframe
 
+MULTICORE_SUPPORT = ['resample']
 
 class ChemInfPreProc(object):
-    def __init__(self, controller, in_file=None):
-        if hasattr(controller.args, 'percentage'):
+    def __init__(self, controller):
+        self.shuffle = controller.args.shuffle
+        self.project_name = controller.args.name
+        self.infile = controller.args.infile
+        if controller.args.mode == 'preproc':
+            self.mode = controller.args.preproc_mode
             self.percentage = controller.args.percentage
-        if hasattr(controller.args, 'shuffle'):
-            self.shuffle = controller.args.shuffle
-        self.project_name = controller.project_name
-        self.in_file = controller.args.in_file
-        self.mode = controller.args.postproc_mode
+        else:
+            self.mode = 'auto'
+            self.percentage = controller.config.execute.train_test_ratio
+            self.auto_plus_resample = controller.config.execute.auto_plus_resample
         self.nr_core = controller.args.nr_core
         self.chunksize = controller.args.chunksize
-        self.out_file = controller.args.out_file
-        self.out_file2 = None
+        self.outfile = controller.args.outfile
+        self.outfile2 = controller.args.outfile2
         self.src_dir = controller.src_dir
-        self.auto_plus_resample = controller.config.execute.auto_plus_resample
 
     def run(self):
-        if self.nr_core > 1:
-            if self.mode in ['split', 'trim']:
-                raise ValueError(f"{self.mode} don't have multicore support")
-            self._multicore()
+        if self.nr_core:
+            if self.nr_core > 1:
+                if self.mode in MULTICORE_SUPPORT:
+                    self._multicore()
+                else:
+                    raise ValueError(f"{self.mode} doesn't have multicore support")
+            else:
+                self._single_thread()
         else:
-            self._single_thread()
+            if self.mode == 'auto':
+                if self.auto_plus_resample:
+                    dataframe = self._run_auto_resample(save=False)
+                else:
+                    dataframe = None
+                self._run_auto_split(dataframe)
+            else:
+                raise ValueError(f"{self.mode} can't be run with preproc")
 
-    def run_auto(self):
-        if not self.mode == 'auto':
-            raise ValueError("preproc.run_auto() can only be executed in auto mode")
-        if self.auto_plus_resample:
-            out_file = self._make_auto_file('balanced')
-            self._run_auto_resample(out_file)
-            in_file = remove_name_sep(out_file)
-            train_file_path = self._make_auto_file('train', file=in_file)
-            test_file_path = self._make_auto_file('test', file=in_file)
+    def _run_auto_resample(self, infile=None, save=True):
+        if infile is None:
+            infile = self.infile
+        if save:
+            file_path = self._make_auto_outfile('balanced')
+            self.mode = 'resample'
+            self._single_thread(infile, outfile=file_path)
+            self.mode = 'auto'
+            return _remove_name_sep(file_path)
         else:
-            in_file = self.in_file
-            train_file_path = self._make_auto_file('train')
-            test_file_path = self._make_auto_file('test')
+            self.mode = 'resample'
+            dataframe = self._single_thread(infile, save=False)
+            self.mode = 'auto'
+            return dataframe
 
-        self.mode = 'split'
-        self._single_thread(in_file=in_file, out_file=train_file_path, out_file2=test_file_path)
+    def _run_auto_split(self, infile=None, save=True):
+        if infile is None:
+            infile = self.infile
 
-        return {'train': remove_name_sep(train_file_path), 'test': remove_name_sep(test_file_path)}
+        if save:
+            train_file_path = self._make_auto_outfile('train')
+            test_file_path = self._make_auto_outfile('test')
+            print(train_file_path)
+            print(test_file_path)
+            self.mode = 'split'
+            self._single_thread(infile, outfile=train_file_path, outfile2=test_file_path)
+            self.mode = 'auto'
+            return {'train': train_file_path, 'test': test_file_path}
+        else:
+            train_dataframe, test_dataframe = self._single_thread(infile, save=False)
+            self.mode = 'auto'
+            return train_dataframe, test_dataframe
 
-    def _run_auto_resample(self, out_file):
-        self.mode = 'resample'
-        self._single_thread(out_file=out_file)
-
-    def _make_auto_file(self, suffix, file=None):
+    def _make_auto_outfile(self, suffix, file=None):
         if file is None:
-            file = self.in_file
-        file_dir = os.path.dirname(file)
+            file = self.infile
+        file_dir = os.path.basename(file)
         file_name, file_extension = os.path.splitext(file_dir)
         if self.auto_plus_resample:
-            return f"{self.src_dir}/data/{file_name}_{suffix}.{file_extension}"
+            return f"{self.src_dir}/data/{file_name}_{suffix}{file_extension}"
         else:
-            return f"{self.src_dir}/data/{file_name}_{suffix}.{file_extension}"
+            return f"{self.src_dir}/data/{file_name}_{suffix}{file_extension}"
 
-    def _single_thread(self, in_file=None, out_file=None, out_file2=None, save=True):
-        if in_file is None:
-            in_file = self.in_file
+    def _single_thread(self, infile=None, outfile=None, outfile2=None, save=True):
+        if infile is None:
+            infile = self.infile
 
-        if out_file is None:
-            out_file = self.out_file
+        if outfile is None:
+            outfile = self.outfile
 
         if self.mode == 'resample':
-            dataframe = resample_file(in_file, self.chunksize)
+            dataframe = self.resample(infile=infile)
             if save:
-                save_dataframe(dataframe, out_file)
+                save_dataframe(dataframe, outfile)
             else:
                 return dataframe
+
         else:
             if self.mode == 'split':
-                if out_file2 is None:
-                    out_file2 = self.out_file2
-                dataframe_large, dataframe_small = cut_file(in_file, self.percentage, self.shuffle, split=True)
+                if outfile2 is None:
+                    outfile2 = self.outfile2
+                dataframe_large, dataframe_small = self.cut(split=True)
                 if save:
-                    save_dataframe(dataframe_large, out_file)
-                    save_dataframe(dataframe_small, out_file2)
+                    save_dataframe(dataframe_large, outfile)
+                    save_dataframe(dataframe_small, outfile2)
                 return dataframe_large, dataframe_small
-
             elif self.mode == 'trim':
-                dataframe = cut_file(in_file, self.percentage, self.shuffle)
+                dataframe = self.cut(infile)
                 if save:
-                    save_dataframe(dataframe, out_file)
+                    save_dataframe(dataframe, outfile)
                 else:
                     return dataframe
 
@@ -100,10 +124,10 @@ class ChemInfPreProc(object):
             mp = __import__('multiprocessing', globals(), locals())
             print(f"Available cores: {mp.cpu_count()}")
             ctx = mp.get_context('spawn')
-            with ctx.Pool(args.nr_core) as pool:
+            with ctx.Pool(self.nr_core) as pool:
                 dataframe = pd.DataFrame()
                 if self.mode == "resample":
-                    chunks = read_dataframe(self.in_file, chunksize=self.chunksize)
+                    chunks = read_dataframe(self.infile, chunksize=self.chunksize)
                     print(f"Starting multicore resampling with {self.nr_core} cores")
                     pool_stack = pool.imap_unordered(resample_dataframe, chunks)
                     for i, pool_dataframe in enumerate(pool_stack):
@@ -114,26 +138,47 @@ class ChemInfPreProc(object):
                 pool.join()
 
                 dataframe = shuffle_dataframe(dataframe)
-                save_dataframe(dataframe, self.out_file)
+                save_dataframe(dataframe, self.outfile)
         else:
             raise ValueError(f"{self.mode} doesn't have multicore support")
 
+    def resample(self, infile=None):
+        if infile is None:
+            infile = self.infile
+        chunks = read_dataframe(infile, chunksize=self.chunksize)
+        dataframe = pd.DataFrame()
+
+        if self.chunksize:
+            print(f"\nStart creating resampled dataframe from {infile} in chunks with size {self.chunksize} rows")
+            for i, chunk in enumerate(chunks):
+                print(f"\nWorking on chunk {i}\n-----------------------------------")
+                dataframe_chunk = resample_dataframe(chunk)
+                dataframe = pd.concat([dataframe, dataframe_chunk])
+
+        else:
+            print(f"\nStart creating resampled dataframe from {infile}")
+            dataframe = resample_dataframe(chunks)
+
+        print("\nShuffles the dataset")
+        return shuffle_dataframe(dataframe)
+
+    # Todo: Implement multicore support for trim and split mode
+    def cut(self, infile=None, dataframe=None, split=False):
+        if dataframe is None:
+            if infile is None:
+                infile = self.infile
+            dataframe = read_dataframe(infile, shuffle=self.shuffle)
+
+        index = int(np.round(len(dataframe) * self.percentage))
+        dataframe1 = dataframe.iloc[:index, :]
+        if split:
+            dataframe2 = dataframe.iloc[index:, :]
+            return dataframe1, dataframe2
+        else:
+            return dataframe1
+
     def get(self, key):
         return getattr(self, key)
-
-def resample_file(file, chunksize):
-    chunks = read_dataframe(file, chunksize=chunksize)
-    dataframe = pd.DataFrame()
-
-    print(f"\nStart creating resampled dataframe from {file} in chunks with size {chunksize} rows")
-
-    for i, chunk in enumerate(chunks):
-        print(f"\nWorking on chunk {i}\n-----------------------------------")
-        dataframe_chunk = resample_dataframe(chunk)
-        dataframe = pd.concat([dataframe, dataframe_chunk])
-
-    print("\nShuffles the dataset")
-    return shuffle_dataframe(dataframe)
 
 
 def resample_dataframe(dataframe):
@@ -150,22 +195,6 @@ def resample_dataframe(dataframe):
     dataframe_resample = pd.concat([dataframe_class0_resample, dataframe_class1])
 
     return dataframe_resample
-
-
-def shuffle_dataframe(dataframe):
-    return dataframe.sample(frac=1, random_state=123, axis=0)
-
-
-def cut_file(file, percentage, shuffle, split=False):
-    dataframe = read_dataframe(file, shuffle=shuffle)
-
-    index = int(np.round(len(dataframe) * percentage))
-    dataframe1 = dataframe.iloc[:index, :]
-    if split:
-        dataframe2 = dataframe.iloc[index:, :]
-        return dataframe1, dataframe2
-    else:
-        return dataframe1
 
 
 def shuffle_arrays_in_unison(array_a, array_b, seed=None):
@@ -199,6 +228,6 @@ def split_array(array, percent_to_first, array_size=None, shuffle=False):
         array_1 = array[:split_index]
         array_2 = array[split_index:]
     else:
-        raise ("Split_array is only implemented for 1 and 2 dimensional arrays.")
+        raise Exception("Split_array is only implemented for 1 and 2 dimensional arrays.")
 
     return array_1, array_2

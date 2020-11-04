@@ -2,19 +2,32 @@ import configparser
 import argparse
 import os
 from datetime import datetime
-import numpy as np
 
-from src.cheminf.classifiers import CLASSIFIER_TYPES
+from ..cheminf.classifiers import CLASSIFIER_TYPES
 
 MODEL_MODES = ['build', 'improve', 'predict', 'validate']
 DATA_MODES = ['postproc', 'preproc']
 AUTO_MODES = ['auto']
+SUBMODES = ['preproc_mode', 'postproc_mode']
+ALL_MODES = MODEL_MODES + DATA_MODES + AUTO_MODES + SUBMODES
+
+OCCASIONAL_FLAGS = ['outfile', 'outfile2', 'classifier', 'models_dir', 'percentage', 'shuffle', 'significance',
+                    'override_config',
+                    'chunksize', 'nr_core']
+
+ALL_FLAGS = ['infile', 'name', 'override_config'] + OCCASIONAL_FLAGS
 
 
 class ChemInfInput(object):
     def __init__(self, config_file):
         self.args = self.argument_parser()
-        self.config = ChemInfConfig(self.args.mode, self.args.classifier, config_file, self.args.config)
+        for flag in OCCASIONAL_FLAGS:
+            if not hasattr(self.args, flag):
+                setattr(self.args, flag, None)
+        for mode in SUBMODES:
+            if not hasattr(self.args, mode):
+                setattr(self.args, mode, None)
+        self.config = ChemInfConfig(self.args.mode, self.args.classifier, config_file, self.args.override_config)
 
     @staticmethod
     def argument_parser():
@@ -75,6 +88,9 @@ class ChemInfInput(object):
 
         parser_postproc_plot = parser_postproc_mode.add_parser('plot',
                                                                help="Choose a preprocessing mode to preform")
+        all_parsers = [parser_auto, parser_build, parser_improve, parser_predict,
+                       parser_validate, parser_preproc_resample, parser_preproc_split, parser_preproc_trim,
+                       parser_postproc_summary, parser_postproc_plot]
 
         for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate]:
             subparser.add_argument('-cl', '--classifier',
@@ -82,20 +98,15 @@ class ChemInfInput(object):
                                    choices=['rndfor', 'nn', 'all'],
                                    help="Choose one or all classifiers for model operations")
 
-        for subparser in [parser_auto, parser_build, parser_improve, parser_predict,
-                          parser_validate, parser_preproc_resample, parser_preproc_split, parser_preproc_trim,
-                          parser_postproc_summary, parser_postproc_plot]:
-            subparser.add_argument('-i', '--in_file',
+        for subparser in all_parsers:
+            subparser.add_argument('-i', '--infile',
                                    required=True,
                                    help="(For 'build, 'validate', 'predict') "
                                         "Specify the file containing the data.")
 
         date = datetime.now()
         current_date = date.strftime("%d-%m-%Y")
-        for subparser in [parser_auto, parser_build, parser_improve, parser_predict,
-                          parser_validate, parser_preproc_resample, parser_preproc_split, parser_preproc_trim,
-                          parser_postproc_summary,
-                          parser_postproc_plot]:
+        for subparser in all_parsers:
             subparser.add_argument('-n', '--name',
                                    default=current_date,
                                    help="Name of the current project, to which all out_puts "
@@ -103,13 +114,13 @@ class ChemInfInput(object):
 
         for subparser in [parser_predict, parser_validate, parser_preproc_resample,
                           parser_preproc_split, parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]:
-            subparser.add_argument('-o', '--out_file',
+            subparser.add_argument('-o', '--outfile',
                                    default=None,
                                    help="Specify the output file with path. If it's not specified for \'predict\' "
                                         "then it will be sat to default (data/predictions)")
 
         for subparser in [parser_validate, parser_preproc_split]:
-            subparser.add_argument('-o2', '--out_file2',
+            subparser.add_argument('-o2', '--outfile2',
                                    default=None,
                                    help="Specify the second output file.")
 
@@ -141,19 +152,18 @@ class ChemInfInput(object):
                                         "significance level, give a value between "
                                         "0 and 1.")
 
-        for subparser in [parser_auto, parser_build, parser_improve, parser_predict,
-                          parser_validate]:
-            subparser.add_argument('-ocf', '--override_config',
+        for subparser in all_parsers:
+            subparser.add_argument('-cfg', '--override_config',
                                    default=None,
                                    help="Specify a parameter in the configuration that will to be override ")
 
-        for subparser in [parser_preproc_resample]:
+        for subparser in [parser_auto, parser_preproc_resample]:
             subparser.add_argument('-ch', '--chunksize',
-                                   default=None,
+                                   default=100000,
                                    type=int,
                                    help="Specify size of chunks the files should be divided into.")
 
-        for subparser in [parser_preproc_resample]:
+        for subparser in [parser_preproc_resample, parser_preproc_split, parser_preproc_trim]:
             subparser.add_argument('-nc', '--nr_core',
                                    default=1,
                                    type=int,
@@ -181,7 +191,8 @@ class ChemInfConfig(object):
             self.classifier = ConfigClf(classifier_type, self.clf_conf_file)
         else:
             self.classifier = None
-        self.update_config(overrider)
+        if overrider is not None:
+            self.update_config(overrider)
 
     def update_config(self, overrider):
         new_configs = overrider.split(';')
@@ -209,10 +220,10 @@ class ConfigClf(object):
             self.n_jobs = int(config['random_forest']['n_jobs'])
             self.pred_nrow = float(config['random_forest']['pred_nrow']),
             self.val_folds = int(config['random_forest']['val_folds']),
-            self.smooth = bool(config['random_forest']['smooth']),
+            self.smooth = boolean(config['random_forest']['smooth']),
             self.data_type = str(config['random_forest']['data_type'])
 
-        elif classifier_type == 'nn' or classifier_type == 'all':
+        if classifier_type == 'nn' or classifier_type == 'all':
             self.val_ratio = float(config['neural_network']['val_ratio'])
             self.cal_ratio = float(config['neural_network']['cal_ratio'])
             self.dim_in = int(config['neural_network']['dim_in'])
@@ -231,8 +242,6 @@ class ConfigClf(object):
 
         else:
             raise ValueError("Config mode doesn't exist")
-    
-        
 
 
 class ConfigExec(object):
@@ -241,12 +250,15 @@ class ConfigExec(object):
         config.read(config_file)
 
         if operator_mode == 'auto':
-            self.auto_plus_resample = int(config['auto']['auto+resample'])
-            self.auto_plus_summery = float(config['auto']['auto+summery'])
-            self.auto_plus_summery = float(config['auto']['auto+plot'])
+            self.auto_plus_resample = boolean(config['auto']['auto+resample'])
+            self.auto_plus_sum = boolean(config['auto']['auto+sum'])
+            self.auto_plus_plot = boolean(config['auto']['auto+plot'])
             self.train_test_ratio = float(config['auto']['train_test_ratio'])
-        elif operator_mode == 'postproc':
+
+        if operator_mode == 'postproc' or operator_mode == 'auto':
             self.error_level = int(config['postproc']['error_level'])
+            self.plot_del_sum = boolean(config['postproc']['plot_del_sum'])
+            print(self.plot_del_sum)
 
 
 class ChemInfController(ChemInfInput):
@@ -255,12 +267,6 @@ class ChemInfController(ChemInfInput):
     auto_modes = AUTO_MODES
     classifier_types = CLASSIFIER_TYPES
     src_dir = None
-    models_dir = None
-    in_file = None
-    pred_files = {}
-    out_file = None
-    out_file2 = None
-    project_name = None
     args = None
     config = None
     initiated = False
@@ -273,98 +279,94 @@ class ChemInfController(ChemInfInput):
             pass
 
     def __init__(self):
-        config_files = [f"{self.src_dir}/config/classifiers.ini", f"{self.src_dir}/config/execute.ini",
-                        f"{self.src_dir}/config/classifiers.ini", f"{self.src_dir}/config/classifiers.ini"]
-        super(ChemInfInput, self).__init__(config_files)
         file_dir = os.path.dirname(os.path.abspath(__file__))
-        self.src_dir = os.path.dirname(file_dir)
+        package_dir = os.path.dirname(file_dir)
+        self.src_dir = os.path.dirname(package_dir)
+        config_files = [f"{self.src_dir}/config/classifiers.ini", f"{self.src_dir}/config/execute.ini"]
+        super().__init__(config_files)
         self.project_name = self.args.name
-        self.add_in_file()
+        self.update_infile()
         if self.args.mode in self.model_modes or self.args.mode in self.auto_modes:
-            self.add_model_path()
-        if self.args.mode == 'predict' or self.args.mode == 'auto':
+            self.update_model_path()
+        if self.args.mode in MODEL_MODES or self.args.mode == 'auto':
             self.add_predict_path()
         if self.args.mode == 'preproc' or self.args.mode == 'postproc' or self.args.mode == 'auto':
-            self.add_out_file()
-        if self.args.mode == 'validate':
-            if hasattr(self.args, 'out_file2'):
-                self.out_file2 = self.args.out_file2
-            else:
-                self.out_file2 = None
+            self.update_outfile()
 
-    def add_in_file(self):
-        if not os.path.exists(self.args.in_file):
-            in_file = f"{self.src_dir}/data/{self.args.in_file}"
-            if os.path.exists(in_file):
-                self.in_file = in_file
+    def update_infile(self):
+        if not os.path.exists(self.args.infile):
+            if self.args.mode == 'postproc':
+                infile = f"{self.src_dir}/data/predictions/{self.args.name}/{self.args.infile}"
+            else:
+                infile = f"{self.src_dir}/data/{self.args.infile}"
+            if os.path.isfile(infile):
+                self.args.infile = infile
             else:
                 raise FileNotFoundError(f"Couldn't find the input file, both absolut path and file name in the data "
                                         f"directory in the ChemInf source directory ({self.src_dir}/data) has been "
                                         f"explored")
-        else:
-            self.in_file = self.args.in_file
 
-    def add_out_file(self):
-        in_file_name, in_file_extension = os.path.split(os.path.basename(self.in_file))
-        if self.args.mode == 'preproc':
-            if self.args.out_file:
-                self.out_file = self.args.out_file
-            else:
+    def update_outfile(self):
+        infile_name, infile_extension = os.path.splitext(os.path.basename(self.args.infile))
+        if not self.args.outfile:
+            if self.args.mode == 'preproc':
                 if self.args.preproc_mode == 'trim':
-                    self.out_file = f"{self.src_dir}/data/{in_file_name}_trimmed.{in_file_extension}"
+                    self.args.outfile = f"{self.src_dir}/data/{infile_name}_trimmed{infile_extension}"
                 elif self.args.preproc_mode == 'resample':
-                    self.out_file = f"{self.src_dir}/data/{in_file_name}_balanced.{in_file_extension}"
+                    self.args.outfile = f"{self.src_dir}/data/{infile_name}_balanced{infile_extension}"
                 elif self.args.preproc_mode == 'split':
-                    self.out_file = f"{self.src_dir}/data/{in_file_name}_train.{in_file_extension}"
-                    if self.args.out_file2:
-                        self.out_file2 = self.args.out_file2
-                    else:
-                        self.out_file2 = f"{self.src_dir}/data/{in_file_name}_test.{in_file_extension}"
+                    self.args.outfile = f"{self.src_dir}/data/{infile_name}_train{infile_extension}"
+                    if not self.args.outfile2:
+                        self.args.outfile2 = f"{self.src_dir}/data/{infile_name}_test{infile_extension}"
+            elif self.args.mode == 'postproc':
+                self.args.outfile = f"{self.src_dir}/data/predictions/{self.project_name}/" \
+                                    f"{infile_name}_summary{infile_extension}"
 
-        elif self.args.mode == 'postproc':
-            if self.args.out_file:
-                self.out_file = self.args.out_file
-            else:
-                self.out_file = f"{self.src_dir}/data/predictions/{self.project_name}/" \
-                                f"{self.project_name}_{self.args.classifier}_summary.csv"
-
-    def add_model_path(self):
+    def update_model_path(self):
         if not self.args.models_dir:
-            self.models_dir = f"{self.src_dir}/data/models/{self.project_name}"
-        else:
-            self.models_dir = self.args.models_dir
+            self.args.models_dir = f"{self.src_dir}/data/models/{self.project_name}"
         try:
-            os.mkdir(self.models_dir)
-            print(f"Created the model directory: {self.models_dir}")
+            os.mkdir(self.args.models_dir)
+            print(f"Created the model directory: {self.args.models_dir}")
         except FileExistsError:
             pass
 
     def add_predict_path(self):
         def _add_predict_path(classifier_types):
-            _pred_files = []
-            for i, _classifier in enumerate(classifier_types):
-                path = f"{self.src_dir}/data/predictions/{self.project_name}/" \
-                       f"{self.project_name}_{_classifier}_predict.csv"
-                _pred_files[_classifier] = path
+            _pred_files = {}
+            if self.args.outfile is None:
+                for i, _classifier in enumerate(classifier_types):
+                    path = f"{self.src_dir}/data/predictions/{self.project_name}/" \
+                           f"{self.project_name}_{_classifier}_predict.csv"
+                    _pred_files[_classifier] = path
+            else:
+                outfile_name, outfile_extension = os.path.splitext(os.path.basename(self.args.outfile))
+                for i, _classifier in enumerate(classifier_types):
+                    path = f"{outfile_name}_{_classifier}{outfile_extension}"
+                    _pred_files[_classifier] = path
+                    self.update_outfile()
             return _pred_files
 
         if self.args.classifier == 'all':
-            self.pred_files = _add_predict_path(self.classifier_types)
-        else:
-            if self.args.out_file is None:
-                self.pred_files = _add_predict_path([self.args.classifier])
+            if not self.args.mode == 'build':
+                self.args.pred_files = _add_predict_path(self.classifier_types)
             else:
-                self.pred_files[self.args.classifier] = self.args.out_file
-
+                self.args.pred_files = None
+        else:
+            self.args.pred_files = _add_predict_path([self.args.classifier])
             for classifier in self.classifier_types:
                 try:
-                    pred_dir = os.path.dirname(self.pred_files[classifier])
-                    pred_file_name = os.path.basename(self.pred_files[classifier])
+                    pred_dir = os.path.dirname(self.args.pred_files[classifier])
+                    pred_file_name = os.path.basename(self.args.pred_files[classifier])
                     os.mkdir(pred_dir)
                     print(f"Created the prediction directory for {pred_file_name}: {pred_dir}")
-                except FileExistsError:
+                except (KeyError, FileExistsError) as e:
                     pass
 
     @classmethod
     def get(cls, key):
         return getattr(cls, key)
+
+
+def boolean(string):
+    return string.lower() in ("yes", "true", "t", "1")

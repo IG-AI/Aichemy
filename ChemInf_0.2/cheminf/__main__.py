@@ -1,4 +1,3 @@
-__name__ = 'cheminf'
 __version__ = 0.2
 __authors__ = "Daniel Ågtrand, Leonard Sparring"
 __email__ = "d.e.agstrand@gmail.com, leo.sparring@gmail.com"

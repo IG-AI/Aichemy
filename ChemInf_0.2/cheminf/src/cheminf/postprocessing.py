@@ -7,78 +7,88 @@ import numpy as np
 
 class ChemInfPostProc(object):
     def __init__(self, controller):
-        self.path = controller.src_dir
-        self.project_name = controller.project_name
+        self.project_name = controller.args.name
         self.mode = controller.args.postproc_mode
         self.classifier = controller.args.classifier
-        self.error_level = controller.config.error_level
+        self.error_level = controller.config.execute.error_level
+        self.auto_plus_plot = (self.mode == 'auto' and controller.config.execute.auto_plus_plot)
+        self.auto_plus_sum = (self.mode == 'auto' and controller.config.execute.auto_plus_sum)
+        self.plot_del_sum = controller.config.execute.plot_del_sum
         if controller.args.significance:
             self.significance = controller.args.significance
         else:
             self.significance = None
         if self.mode == 'auto':
-            self.pred_files = controller.pred_files
+            self.pred_files = controller.arg.pred_files
             self.classifier_type = controller.classifier_type
             self.nr_classifiers = len(controller.classifier_type)
             self.src_dir = controller.src_dir
         else:
-            self.out_file = controller.out_file
-            self.pred_file = controller.pred_files[0]
+            self.outfile = controller.args.outfile
+            self.infile = controller.args.infile
 
-    def run(self, out_files=None):
-        if out_files is None:
-            out_files = self.out_file
-            if self.mode == 'summary':
-                self.make_summary(out_files=out_files)
+    def run(self):
+        if self.mode == 'auto':
+            files = []
+            if self.classifier == 'all':
+                classifiers = self.classifier_type
+            else:
+                classifiers = [self.classifier]
+            for classifier in classifiers:
+                outfile = (f"{self.src_dir}/data/predictions/{self.project_name}/"
+                           f"{self.project_name}_{classifier}_summary.csv")
+                files.append([self.pred_files[classifier], outfile])
+
+        elif self.mode == 'summary' or self.mode == 'plot':
+            files = [[self.infile, self.outfile]]
+        else:
+            ValueError("Postproc mode not supported")
+        if self.mode == 'summary' or self.auto_plus_sum:
+            self.make_summary(files)
+        if self.mode == 'plot' or self.auto_plus_plot:
+            if self.auto_plus_sum:
+                del_sum = False
             elif self.mode == 'plot':
-                self.make_plot()
+                print('inne')
+                print(self.plot_del_sum)
+                del_sum = self.plot_del_sum
+            else:
+                del_sum = True
+            print(del_sum)
+            self.make_plot(files, del_sum)
 
-    def run_auto(self):
-        out_files = []
-        for classifier in self.classifier_type:
-            out_files.append(f"{self.src_dir}/data/predictions/{self.project_name}/"
-                             f"{self.project_name}_{classifier}_summary.csv")
+    def make_summary(self, files):
+        for file_list in files:
+            infile = file_list[0]
+            outfile = file_list[1]
+            if not self.significance:
+                significance_list = [(1 / self.error_level) * i for i in range(1, self.error_level)]
+            else:
+                significance_list = [self.significance]
+            summary_array = read_pred_file(infile, significance_list, self.error_level)
+            write_pred_summary_file(outfile, summary_array, significance_list)
 
-    def make_summary(self, files=None):
-        def _make_summary(_pred_file, _out_file, _significance_list):
-            summary_array = read_pred_file(_pred_file, _significance_list, self.error_level)
-            write_pred_summary_file(_out_file, summary_array, _significance_list)
-
-        if not self.significance:
-            significance_list = [(1 / self.error_level) * i for i in range(1, self.error_level)]
-        else:
-            significance_list = [self.significance]
-
-        if files is None:
-            out_file = self.out_file
-            pred_file = self.pred_file
-            _make_summary(pred_file, out_file, significance_list)
-        else:
-            for pred_file, out_file in files:
-                _make_summary(pred_file, out_file, significance_list)
-
-    def make_plot(self, pred_files=None):
-        def _make_plot(_pred_file, project_name):
-            header, data = read_pred_summary(_pred_file)
-            calibration_plots(header, data, project_name)
-
-        if pred_files is None:
-            pred_file = self.pred_file
-            _make_plot(pred_file, self.project_name)
-        else:
-            for pred_file in pred_files:
-                _make_plot(pred_file, self.project_name)
+    def make_plot(self, files, del_sum):
+        for file_list in files:
+            infile = file_list[0]
+            outfile = file_list[1]
+            if not os.path.exists(outfile):
+                self.make_summary([file_list])
+            header, data = read_pred_summary(outfile)
+            calibration_plots(header, data, infile)
+            if del_sum:
+                os.remove(outfile)
 
     def get(self, key):
         return getattr(self, key)
 
 
-def write_pred_summary_file(out_file, summary_array, significance_list):
+def write_pred_summary_file(outfile, summary_array, significance_list):
     """Calculates standard ML metrics and CP metrics based on the
     set/class-counts. Writes a summary file.
     """
-
-    with open(out_file, 'w+') as fout:
+    print(outfile)
+    with open(outfile, 'w+') as fout:
         fout.write("significance\ttrue_pos\tfalse_pos\ttrue_neg\tfalse_neg\t"
                    "both_class0\tboth_class1\tnull_class0\tnull_class1\t"
                    "error_rate\terror_rate_class1\terror_rate_class0\t"
@@ -100,7 +110,7 @@ def write_pred_summary_file(out_file, summary_array, significance_list):
             # (false_pos + false_neg + null_set) / total_samples
             error_rate = (summary_array[i, 1] + summary_array[i, 3] +
                           summary_array[i, 6] + summary_array[i, 7]) / \
-                         total_samples
+                          total_samples
 
             # (true_pos + both_class1) / total_positives.
             error_rate_class1 = (summary_array[i, 3] +
@@ -172,25 +182,26 @@ def set_prediction(p0, p1, significance):
 
     if p0 > significance:
         if p1 > significance:
-            set_prediction = '{0,1}'
+            _set_prediction = '{0,1}'
         else:
-            set_prediction = '{0}'
+            _set_prediction = '{0}'
     elif p1 > significance:
-        set_prediction = '{1}'
+        _set_prediction = '{1}'
     else:
-        set_prediction = '{}'
+        _set_prediction = '{}'
 
-    return set_prediction
+    return _set_prediction
 
 
-def read_pred_file(in_file, significance_list, error_level):
+def read_pred_file(infile, significance_list, error_level):
     """This function will calculate values for the confusion
     matrix and the set numbers based on a list of significance levels.
     """
 
     summary_array = np.zeros((error_level - 1, 8), dtype=int)
 
-    with open(in_file, 'r') as fin:
+    with open(infile, 'r') as fin:
+        next(fin)
         for line in fin:
             line_list = line.strip().split()
             real_class = line_list[1]
@@ -224,21 +235,20 @@ def read_pred_file(in_file, significance_list, error_level):
     return summary_array
 
 
-def read_pred_summary(in_file):
+def read_pred_summary(infile):
     """Reads a amcp_pred_summary file as outputted
     from the amcp_summarize_pred.py script.
     """
-
-    with open(in_file, 'r') as fin:
+    with open(infile, 'r') as fin:
         header = fin.readline().strip().split()
 
-    data = np.genfromtxt(in_file, delimiter='\t',
+    data = np.genfromtxt(infile, delimiter='\t',
                          dtype=float, skip_header=1)
 
     return header, data
 
 
-def cal_plot(x, y, prefix, factor):
+def cal_plot(x, y, name, factor):
     """Writing out a plot with a name based on the prefix name
     and the factor.
     """
@@ -252,20 +262,22 @@ def cal_plot(x, y, prefix, factor):
     plt.xlabel('significance', fontweight='bold')
     plt.ylim((0, 1))
     plt.xlim((0, 1))
-    plt.savefig(f'{prefix}.{factor}.png', dpi=300)
+    plt.savefig(f'{name}_{factor}.png', dpi=300)
     plt.clf()
 
 
-def calibration_plots(header, data, prefix):
+def calibration_plots(header, data, file_path):
     """Calculating summary statistics and plotting them for a set of
     error levels.
     """
 
     x = np.copy(data[:, 0])
 
+    name, _ = os.path.splitext(file_path)
+
     for i in range(9, len(header)):
         factor = header[i]
         y = data[:, i]
         y_masked = np.ma.masked_invalid(y)
         x_masked = np.ma.array(x, mask=y_masked.mask)
-        cal_plot(x_masked, y_masked, prefix, factor)
+        cal_plot(x_masked, y_masked, name, factor)

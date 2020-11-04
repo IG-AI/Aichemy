@@ -4,33 +4,28 @@ import sys
 import cloudpickle
 import numpy as np
 
-from src.cheminf.classifiers import ChemInfClassifier
-from src.cheminf.preprocessing import split_array, ChemInfPreProc
-from src.cheminf.operator import read_dataframe
+from ..cheminf.classifiers import ChemInfClassifier
+from ..cheminf.preprocessing import split_array, ChemInfPreProc
+from ..cheminf.utils import read_dataframe
 
 
 class ChemInfModel(object):
     def __init__(self, controller, model_type):
-        if controller.args.mode == ['auto']:
+        if controller.args.mode == 'auto':
             preproc = ChemInfPreProc(controller)
-            datasets = preproc.run_auto()
-            self.train_set = datasets['train']
-            self.test_set = datasets['test']
+            dataset = preproc.run()
+            self.train_set = dataset['train']
+            self.test_set = dataset['test']
             self.auto_mode = True
-
         else:
-            self.in_file = controller.args.in_file
+            self.infile = controller.args.infile
             self.auto_mode = False
         self.type = model_type
-        self.out_file = controller.pred_files[model_type]
+        self.outfile = controller.args.pred_files[model_type]
         self.config = controller.config.classifier
-        self.project_name = controller.project_name
-        self.models_dir = controller.models_dir
+        self.project_name = controller.args.name
+        self.models_dir = controller.args.models_dir
         self.classifier = ChemInfClassifier(self.type, self.config)
-
-    def update_datasets(self, datasets):
-        self.train_set = datasets['train']
-        self.test_set = datasets['test']
 
     def save_models(self, model=None, iteration=0):
         if model is None:
@@ -90,33 +85,34 @@ class ChemInfModel(object):
     def get(self, key):
         return getattr(self, key)
 
-    def _choice_input(self, label):
+    def _get_dataframe(self, label):
         if self.auto_mode:
-            dataset = getattr(self, label)
+            datafile = getattr(self, label)
         else:
-            dataset = self.in_file
-        return dataset
+            datafile = self.infile
+        dataframe = read_dataframe(datafile)
+        return dataframe
 
 
 class ModelRNDFOR(ChemInfModel):
     def __init__(self, database):
         super(ModelRNDFOR, self).__init__(database, 'rndfor')
-        if hasattr(database.args, 'out_file2'):
-            self.out_file_train = database.args.out_file2
+        if database.args.outfile2:
+            self.outfile_train = database.args.outfile2
 
     def build(self, models=None):
         """Trains NR_MODELS models and saves them as compressed files
         in the MODELS_PATH directory along with the calibration
         conformity scores.
         """
-        from src.cheminf.preprocessing import shuffle_arrays_in_unison
-        from src.cheminf.operator import read_array
+        from ..cheminf.preprocessing import shuffle_arrays_in_unison
+        from ..cheminf.utils import read_array
 
         nr_models = self.config.nr_models
         prop_train_ratio = self.config.prop_train_ratio
         data_type = self.config.data_type
 
-        train_set = self._choice_input('train_set')
+        train_set = self._get_dataframe('train')
 
         training_id, training_data = read_array(train_set, data_type)
         nr_of_training_samples = len(training_id)
@@ -151,13 +147,13 @@ class ModelRNDFOR(ChemInfModel):
         Initializes a fixed size numpy array. Reads in nrow lines of the
         input file and then predicts the samples in the batch with each
         ml_model. The median p-values are calculated and written out in the
-        out_file. This is performed until all lines in the in_file are predicted.
+        outfile. This is performed until all lines in the infile are predicted.
         """
-        out_file_path, out_file = os.path.split(self.out_file)
-        if not os.path.isdir(out_file_path):
-            os.mkdir(out_file_path)
+        outfile_path, outfile = os.path.split(self.outfile)
+        if not os.path.isdir(outfile_path):
+            os.mkdir(outfile_path)
 
-        test_set = self._choice_input('test_set')
+        test_set = self._get_dataframe('test')
 
         # Reading parameters
         nrow = self.config.pred_nrow  # To control memory.
@@ -181,7 +177,7 @@ class ModelRNDFOR(ChemInfModel):
         else:
             fin = open(test_set, 'r')
 
-        with open(os.path.join(out_file_path, out_file), 'w+') as fout:
+        with open(os.path.join(outfile_path, outfile), 'w+') as fout:
             # Getting dimensions for np.array allocation.
             if extension == '.gz' or extension == '.bz2':
                 ncol = len(fin.readline().decode().split()) - 1
@@ -208,7 +204,7 @@ class ModelRNDFOR(ChemInfModel):
                 if extension == '.gz' or extension == '.bz2':
                     line = line.decode()  # Bin to str conversion.
                 if i % nrow != nrow - 1:
-                    # Inserting data from the in_file into np.arrays.
+                    # Inserting data from the infile into np.arrays.
                     (sample_id[i % nrow],
                      sample_data) = line.strip().split(None, 1)
                     predict_data[i % nrow] = sample_data.split()
@@ -272,8 +268,8 @@ class ModelRNDFOR(ChemInfModel):
     def validate(self):
         """Cross validation using the K-fold method.
         """
-        from src.cheminf.preprocessing import shuffle_arrays_in_unison
-        from src.cheminf.operator import read_array
+        from ..cheminf.preprocessing import shuffle_arrays_in_unison
+        from ..cheminf.utils import read_array
 
         # Reading parameters
         nr_models = self.config.nr_models
@@ -282,21 +278,21 @@ class ModelRNDFOR(ChemInfModel):
 
         # Reading in file to use for validation.
         data_type = self.config.data_type
-        val_id, val_data = read_array(self.in_file, data_type)
+        val_id, val_data = read_array(self.infile, data_type)
         nr_of_val_samples = len(val_id)
         val_indices = np.array(range(nr_of_val_samples))
         nr_holdout_samples = int(nr_of_val_samples / val_folds)
         nr_class = len(np.unique(val_data[:, 0]))
 
         # Out file(s).
-        fout_test = open(self.out_file, 'w+')
+        fout_test = open(self.outfile, 'w+')
         class_string = "\t".join(['p(%d)' % c for c in range(nr_class)])
-        fout_test.write(f"validation\ttest_samples\tvalidation_file:\"{self.in_file}\"\n"
+        fout_test.write(f"validation\ttest_samples\tvalidation_file:\"{self.infile}\"\n"
                         f"sampleID\treal_class\t{class_string}\n")
 
-        if self.out_file_train:
-            fout_train = open(self.out_file_train, 'w+')
-            fout_train.write(f"validation\ttrain_samples\tvalidation_file:\"{self.in_file}\"\n"
+        if self.outfile_train:
+            fout_train = open(self.outfile_train, 'w+')
+            fout_train.write(f"validation\ttrain_samples\tvalidation_file:\"{self.infile}\"\n"
                              f"sampleID\treal_class\t{class_string}\n")
 
         for k in range(val_folds):
@@ -316,7 +312,7 @@ class ModelRNDFOR(ChemInfModel):
 
             # Three dimensional class array. Initialize/reset.
             p_c_array = np.empty((nr_of_test_samples, nr_models, nr_class), dtype=float)
-            if self.out_file_train:
+            if self.outfile_train:
                 p_c_array_training = np.empty((nr_of_training_samples,
                                                nr_models, nr_class), dtype=float)
             print(f"Allocated memory for array.")
@@ -343,7 +339,7 @@ class ModelRNDFOR(ChemInfModel):
                     calibration_alphas_c.append(alpha_c)
 
                 test_alphas = model.nonconformity_scores(test_data[:, 1:])
-                if self.out_file_train:
+                if self.outfile_train:
                     training_alphas = model.nonconformity_scores(training_data[:, 1:])
 
                 # Iterate over the classes.
@@ -355,7 +351,7 @@ class ModelRNDFOR(ChemInfModel):
                         p_c_array[sample_index, model_iteration, c] = p_c
 
                 # Iterate over the classes for the training samples.
-                if self.out_file_train:
+                if self.outfile_train:
                     for c, training_alpha_c in enumerate(zip(*training_alphas)):
                         for sample_index in range(nr_of_training_samples):
                             p_c = model.get_CP_p_value(training_alpha_c[sample_index],
@@ -374,7 +370,7 @@ class ModelRNDFOR(ChemInfModel):
                                 f"{p_c_string}\n")
 
             # Calculating median p for each sample in the array, class c
-            if self.out_file_train:
+            if self.outfile_train:
                 p_c_medians_training = np.median(p_c_array_training, axis=1)
                 for i in range(nr_of_training_samples):
                     p_c_string = "\t".join([str(p_c_medians_training[i, c]) for c in range(nr_class)])
@@ -383,19 +379,13 @@ class ModelRNDFOR(ChemInfModel):
                                      f"{p_c_string}\n")
 
         fout_test.close()
-        if self.out_file_train:
+        if self.outfile_train:
             fout_train.close()
 
 
 class ModelNN(ChemInfModel):
     def __init__(self, database):
         super(ModelNN, self).__init__(database, 'nn')
-
-    def make_train_test_dataset(self):
-        from src.cheminf.preprocessing import cut_file
-        train_test_ratio = self.config.train_test_ratio
-        dataframe = read_dataframe(self.in_file)
-        return cut_file(dataframe, train_test_ratio, shuffle=True, split=True)
 
     def build(self, models=None):
         import torch
@@ -410,9 +400,8 @@ class ModelNN(ChemInfModel):
         from libs.nonconformist.nc import ClassifierNc, MarginErrFunc
         from libs.torchtools.optim import RangerLars
 
-        test_set = self._choice_input('train_set')
+        train_dataframe = self._get_dataframe('train')
 
-        train_dataframe = read_dataframe(test_set)
         nr_models = self.config.nr_models
         val_ratio = self.config.val_ratio
         cal_ratio = self.config.cal_ratio
@@ -495,8 +484,7 @@ class ModelNN(ChemInfModel):
     def predict(self):
         import pandas as pd
 
-        test_set = self._choice_input('test_set')
-        test_dataframe = read_dataframe(test_set)
+        test_dataframe = self._get_dataframe('test_set')
         nr_models = self.config.nr_models
         sig = self.config.pred_sig
 
@@ -522,8 +510,9 @@ class ModelNN(ChemInfModel):
         p_value_dataframe = pd.concat(p_value_results, axis=1).groupby(level=0, axis=1).median()
         results_dataframe = pd.concat([test_dataframe['id'], test_dataframe['class'], p_value_dataframe], axis=1)
 
-        results_dataframe.to_csv(self.out_file, sep='\t', mode='w+', index=False, header=True)
+        results_dataframe.to_csv(self.outfile, sep='\t', mode='w+', index=False, header=True)
 
+    # Todo: Implement validate mode for nn
     def validate(self):
         raise NotImplementedError("Validation for neural network models aren't implemented yet.")
 
