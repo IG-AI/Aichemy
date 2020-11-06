@@ -17,9 +17,12 @@ work_dir=/proj/carlssonlab/users/x_danag/ChemInf/ChemInf_0.2
 cd $work_dir
 
 echo -e "--------------------------------------------------------------------------\n"
-echo    "STARTING BALANCING "$INFILE
+echo    "STARTING BALANCING ""$INFILE"
 echo -e "\n--------------------------------------------------------------------------\n"
 
 srun -N1 --ntasks=1 --cpus-per-task=2 --mem=100G --time=12:00:00 --exclusive \
 python singularity exec /proj/carlssonlab/singularity/frontline.simg \
-python /cheminf preproc balancing -i $INFILE -o "cheminf/data/"${INFILE%.*}"_balanced" -ch 100000 -nc 2
+python /cheminf preproc balancing -i "$INFILE" -o "cheminf/data/""${INFILE%.*}""_balanced" \
+-ch 100000 -nc $SLURM_CPUS_ON_NODE
+
+# sbatch --export=ALL,INPUT=cheminf/data/d2_full.csv scripts/slurm/sbatch_cheminf_preproc.sh
