@@ -188,7 +188,7 @@ class PreProcAuto(ChemInfPreProc):
     def __init__(self, controller):
         super(PreProcAuto, self).__init__(controller)
         self.train_test_ratio = controller.config.execute.train_test_ratio
-        self.sample_ratio = controller.config.execute.sample_ratio
+        self.resample_ratio = controller.config.execute.resample_ratio
         self.auto_plus_balancing = (self.mode == 'auto' and controller.config.execute.auto_plus_balancing)
         self.auto_plus_resample = (self.mode == 'auto' and controller.config.execute.auto_plus_resample)
 
@@ -220,7 +220,7 @@ class PreProcAuto(ChemInfPreProc):
 
         elif submode == 'resample' or submode == 'balancing':
             if submode == 'resample':
-                self.percentage = self.sample_ratio
+                self.percentage = self.resample_ratio
             elif submode == 'balancing':
                 self.percentage = 1
             file_path = self._make_auto_outfile(submode)
@@ -248,7 +248,6 @@ class PreProcAuto(ChemInfPreProc):
 
 
 def balancing_dataframe(dataframe, percentage=1):
-    print(f"PERCENTAGE: {percentage}")
     dataframe_class0 = dataframe[dataframe['class'] == 0]
     dataframe_class1 = dataframe[dataframe['class'] == 1]
 
