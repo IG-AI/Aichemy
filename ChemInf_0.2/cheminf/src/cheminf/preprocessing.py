@@ -13,7 +13,7 @@ MULTICORE_SUPPORT = ['balancing']
 class ChemInfPreProc(object, metaclass=ABCMeta):
     def __init__(self, controller):
         self.shuffle = controller.args.shuffle
-        self.project_name = controller.args.name
+        self.name = controller.args.name
         self.infile = controller.args.infile
         self.percentage = controller.args.percentage
         self.mode = controller.args.mode
@@ -91,7 +91,7 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
         return self._sample('resample', dataframe_chunks)
 
     def _sample(self, submode, dataframe_chunks=None):
-        if submode != 'balancing' and submode != 'resample':
+        if submode == 'balancing' or submode == 'resample':
             if dataframe_chunks is None:
                 infile = self.infile
                 dataframe_chunks = read_dataframe(infile, chunksize=self.chunksize)
@@ -109,7 +109,7 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
                     print(f"\nWorking on chunk {i}\n-----------------------------------")
 
                 if submode == 'balancing':
-                    dataframe_chunk = balancing_dataframe(chunk)
+                    dataframe_chunk = balancing_dataframe(chunk, percentage=self.percentage)
                 elif submode == 'resample':
                     dataframe_chunk = resample_dataframe(chunk, percentage=self.percentage)
 
@@ -152,7 +152,7 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
 class PreProcNormal(ChemInfPreProc):
     def __init__(self, controller):
         super(PreProcNormal, self).__init__(controller)
-        self.submode = controller.args.postproc_mode
+        self.submode = controller.args.preproc_mode
 
     def run(self):
         if self.nr_core > 1:
@@ -161,6 +161,7 @@ class PreProcNormal(ChemInfPreProc):
             else:
                 raise NoMultiCoreSupport(self.submode)
         else:
+            print(self.submode)
             self._single_thread(self.submode)
 
 
@@ -203,11 +204,11 @@ class PreProcAuto(ChemInfPreProc):
                 self.percentage = self.sample_ratio
             file_path = self.__make_auto_outfile(submode)
             if save:
-                dataframe_path = self._single_thread(submode, dataframe, outfile=file_path)
+                dataframe_path = self._single_thread('balancing', dataframe, outfile=file_path)
                 self.percentage = None
                 return dataframe_path
             else:
-                dataframe = self._single_thread(submode, dataframe, save=False)
+                dataframe = self._single_thread('balancing', dataframe, save=False)
                 self.percentage = None
                 return dataframe
         else:
@@ -224,25 +225,27 @@ class PreProcAuto(ChemInfPreProc):
         else:
             return f"{self.src_dir}/data/{file_name}_{suffix}{file_extension}"
 
+
 def balancing_dataframe(dataframe, percentage=1):
     dataframe_class0 = dataframe[dataframe['class'] == 0]
     dataframe_class1 = dataframe[dataframe['class'] == 1]
 
-    data_classes_count = dataframe_class1.value_counts()
+    dataframe_class1_resampled = resample_dataframe(dataframe_class1, percentage)
 
-    data_division = data_classes_count[1] * percentage
+    data_div = dataframe_class1_resampled['class'].value_counts()
+    nr_samples = int(np.round(data_div[1], decimals=0))
+    print(data_div[1])
+    print(type(data_div[1]))
     dataframe_class0_balancing = resample(dataframe_class0,
                                           replace=False,
-                                          n_samples=data_division,
+                                          n_samples=nr_samples,
                                           random_state=randrange(100, 999))
 
-    return pd.concat([dataframe_class0_balancing, dataframe_class1])
+    return pd.concat([dataframe_class0_balancing, dataframe_class1_resampled])
 
 
 def resample_dataframe(dataframe, percentage=1):
-    nr_data = dataframe[dataframe['class'] == 0]
-    samples = np.round(nr_data * percentage)
-    return resample(replace=False, n_samples=samples, random_state=randrange(100, 999))
+    return dataframe.sample(frac=percentage, random_state=randrange(100, 999), axis=0)
 
 
 def split_dataframe(dataframe, percentage=None, index=None, axis=0):

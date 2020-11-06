@@ -10,7 +10,7 @@ from ..cheminf.utils import ModeError
 
 class ChemInfPostProc(object, metaclass=ABCMeta):
     def __init__(self, controller):
-        self.project_name = controller.args.name
+        self.name = controller.args.name
         self.classifier = controller.args.classifier
         self.error_level = controller.config.execute.error_level
         self.plot_del_sum = controller.config.execute.plot_del_sum
@@ -84,8 +84,8 @@ class PostProcAuto(ChemInfPostProc):
         else:
             classifiers = [self.classifier]
         for classifier in classifiers:
-            outfile = (f"{self.src_dir}/data/predictions/{self.project_name}/"
-                       f"{self.project_name}_{classifier}_predict_summary.csv")
+            outfile = (f"{self.src_dir}/data/predictions/{self.name}/"
+                       f"{self.name}_{classifier}_predict_summary.csv")
             files.append([self.pred_files[classifier], outfile])
 
         if self.auto_plus_sum:

@@ -23,7 +23,7 @@ class ChemInfModel(object, metaclass=ABCMeta):
         self.type = model_type
         self.outfile = controller.args.pred_files[model_type]
         self.config = controller.config.classifier
-        self.project_name = controller.args.name
+        self.name = controller.args.name
         self.models_dir = controller.args.models_dir
         self.classifier = ChemInfClassifier(self.type, self.config)
 
@@ -47,7 +47,7 @@ class ChemInfModel(object, metaclass=ABCMeta):
         if model is None:
             model = self.classifier.architecture
 
-        model_name = f"{self.models_dir}/{self.project_name}_{self.type}_m{iteration}.z"
+        model_name = f"{self.models_dir}/{self.name}_{self.type}_m{iteration}.z"
         if os.path.isfile(model_name):
             os.remove(model_name)
         with open(model_name, mode='ab') as f:
@@ -58,7 +58,7 @@ class ChemInfModel(object, metaclass=ABCMeta):
             model = self.classifier.architecture
 
         for c, alpha_c in enumerate(model.cali_nonconf_scores(calibration_data)):
-            model_score = f"{self.models_dir}/{self.project_name}_{self.type}_calibration-α{c}_m{iteration}.z"
+            model_score = f"{self.models_dir}/{self.name}_{self.type}_calibration-α{c}_m{iteration}.z"
             if os.path.isfile(model_score):
                 os.remove(model_score)
             with open(model_score, mode='ab') as f:
@@ -66,11 +66,11 @@ class ChemInfModel(object, metaclass=ABCMeta):
 
     def load_models(self):
         dir_files = os.listdir(self.models_dir)
-        nr_models = sum([1 for f in dir_files if f.startswith(f"{self.project_name}_{self.type}_m")])
+        nr_models = sum([1 for f in dir_files if f.startswith(f"{self.name}_{self.type}_m")])
         models = []
         print(f"Loading models from {self.models_dir}")
         for i in range(nr_models):
-            model_file = f"{self.models_dir}/{self.project_name}_{self.type}_m{i}.z"
+            model_file = f"{self.models_dir}/{self.name}_{self.type}_m{i}.z"
             with open(model_file, 'rb') as f:
                 models.append(cloudpickle.load(f))
 
@@ -88,7 +88,7 @@ class ChemInfModel(object, metaclass=ABCMeta):
 
         for i in range(nr_models):
             for c in range(nr_class):
-                score_file = f"{self.models_dir}/{self.project_name}_{self.type}_calibration-α{c}_m{i}.z"
+                score_file = f"{self.models_dir}/{self.name}_{self.type}_calibration-α{c}_m{i}.z"
                 with open(score_file, 'rb') as f:
                     scores[c].append(cloudpickle.load(f))
 
@@ -181,7 +181,7 @@ class ModelRNDFOR(ChemInfModel):
         nrow = self.config.pred_nrow  # To control memory.
 
         dir_files = os.listdir(self.models_dir)
-        nr_of_models = sum([1 for f in dir_files if f.startswith(f"{self.project_name}_rndfor")])
+        nr_of_models = sum([1 for f in dir_files if f.startswith(f"{self.name}_rndfor")])
 
         # Initializing list of pointers to model objects
         #  and calibration conformity score lists.

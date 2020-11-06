@@ -1,14 +1,13 @@
 import os
 import re
+import time
 
 import numpy as np
 import pandas as pd
 from random import randrange
 
 
-class Timer(object):
-    num_core = ChemInfController.get('args.num_core')
-
+class WrapperTimer(object):
     def __init__(self, func):
         self.func = func
 
@@ -21,8 +20,6 @@ class Timer(object):
         run_time = np.round(end - begin, decimals=2)
         print("\nTIME PROFILE\n-----------------------------------")
         print(f"Runtime for {self.func.__name__} was {run_time}s")
-        if self.func.__name__ == "multicore":
-            print(f"Runtime per core(s) with {self.func.__name__} was {(run_time * self.num_core)}s")
 
 
 class ConnectionIter(object):

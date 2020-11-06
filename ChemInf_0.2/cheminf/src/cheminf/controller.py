@@ -12,8 +12,7 @@ SUBMODES = ['preproc_mode', 'postproc_mode']
 ALL_MODES = MODEL_MODES + DATA_MODES + AUTO_MODES + SUBMODES
 
 OCCASIONAL_FLAGS = ['outfile', 'outfile2', 'classifier', 'models_dir', 'percentage', 'shuffle', 'significance',
-                    'override_config',
-                    'chunksize', 'nr_core']
+                    'name', 'override_config', 'chunksize', 'nr_core']
 
 ALL_FLAGS = ['infile', 'name', 'override_config'] + OCCASIONAL_FLAGS
 
@@ -41,7 +40,7 @@ class ChemInfInput(object):
 
         parser.add_argument('--version', action='version', version='ChemInf Version 0.2')
 
-        parser_command = parser.add_subparsers(help="Choose a submode to run cheminf in", dest='submode')
+        parser_command = parser.add_subparsers(help="Choose a submode to run cheminf in", dest='mode')
 
         parser_auto = parser_command.add_parser('auto',
                                                 help="Automatic submode that preforms a complete data analysis of a "
@@ -111,7 +110,9 @@ class ChemInfInput(object):
 
         date = datetime.now()
         current_date = date.strftime("%d-%m-%Y")
-        for subparser in all_parsers:
+        for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate,
+                          parser_preproc_split,
+                          parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]:
             subparser.add_argument('-n', '--name',
                                    default=current_date,
                                    help="Name of the current project, to which all out_puts "
@@ -137,7 +138,7 @@ class ChemInfInput(object):
                                         "or 'predict'). Otherwise it will be the default model directory "
                                         "(data/models).")
 
-        for subparser in [parser_preproc_split, parser_preproc_trim, parser_preproc_resample]:
+        for subparser in [parser_preproc_split, parser_preproc_trim, parser_preproc_balancing, parser_preproc_resample]:
             subparser.add_argument('-pc', '--percentage',
                                    type=float,
                                    default=0.5,
@@ -280,7 +281,8 @@ class ChemInfController(ChemInfInput):
     data_modes = DATA_MODES
     auto_modes = AUTO_MODES
     classifier_types = CLASSIFIER_TYPES
-    src_dir = None
+    scr = None
+    name = None
     args = None
     config = None
     initiated = False
@@ -299,7 +301,7 @@ class ChemInfController(ChemInfInput):
 
         config_files = [f"{self.src_dir}/config/classifiers.ini", f"{self.src_dir}/config/execute.ini"]
         super(ChemInfController, self).__init__(config_files)
-        self.project_name = self.args.name
+        self.name = self.args.name
         self.update_infile()
 
         if self.args.mode in self.model_modes or self.args.mode in self.auto_modes:
@@ -335,18 +337,21 @@ class ChemInfController(ChemInfInput):
                 elif self.args.preproc_mode == 'balancing':
                     self.args.outfile = f"{self.src_dir}/data/{infile_name}_balanced{infile_extension}"
 
+                elif self.args.preproc_mode == 'resample':
+                    self.args.outfile = f"{self.src_dir}/data/{infile_name}_resampled{infile_extension}"
+
                 elif self.args.preproc_mode == 'split':
                     self.args.outfile = f"{self.src_dir}/data/{infile_name}_train{infile_extension}"
                     if not self.args.outfile2:
                         self.args.outfile2 = f"{self.src_dir}/data/{infile_name}_test{infile_extension}"
 
             elif self.args.mode == 'postproc':
-                self.args.outfile = f"{self.src_dir}/data/predictions/{self.project_name}/" \
+                self.args.outfile = f"{self.src_dir}/data/predictions/{self.name}/" \
                                     f"{infile_name}_summary{infile_extension}"
 
     def update_model_path(self):
         if not self.args.models_dir:
-            self.args.models_dir = f"{self.src_dir}/data/models/{self.project_name}"
+            self.args.models_dir = f"{self.src_dir}/data/models/{self.name}"
 
         try:
             os.mkdir(self.args.models_dir)
@@ -359,8 +364,8 @@ class ChemInfController(ChemInfInput):
             _pred_files = {}
             if self.args.outfile is None:
                 for i, _classifier in enumerate(classifier_types):
-                    path = f"{self.src_dir}/data/predictions/{self.project_name}/" \
-                           f"{self.project_name}_{_classifier}_predict.csv"
+                    path = f"{self.src_dir}/data/predictions/{self.name}/" \
+                           f"{self.name}_{_classifier}_predict.csv"
                     _pred_files[_classifier] = path
             else:
                 outfile_name, outfile_extension = os.path.splitext(os.path.basename(self.args.outfile))
