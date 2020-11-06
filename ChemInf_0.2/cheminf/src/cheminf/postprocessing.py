@@ -3,70 +3,25 @@ import os
 import matplotlib.pyplot as plt
 
 import numpy as np
+from abc import ABCMeta, abstractmethod
+
+from ..cheminf.utils import ModeError
 
 
-class ChemInfPostProc(object):
+class ChemInfPostProc(object, metaclass=ABCMeta):
     def __init__(self, controller):
         self.project_name = controller.args.name
-        mode = controller.args.mode
-
-        if mode == 'postproc':
-            self.mode = controller.args.postproc_mode
-        elif mode == 'auto':
-            self.mode = mode
-        else:
-            raise ValueError("Post process can only be initialized in postproc and auto mode")
-
         self.classifier = controller.args.classifier
         self.error_level = controller.config.execute.error_level
-        self.auto_plus_plot = (self.mode == 'auto' and controller.config.execute.auto_plus_plot)
-        self.auto_plus_sum = (self.mode == 'auto' and controller.config.execute.auto_plus_sum)
         self.plot_del_sum = controller.config.execute.plot_del_sum
-
         if controller.args.significance:
             self.significance = controller.args.significance
         else:
             self.significance = None
 
-        if self.mode == 'auto':
-            self.pred_files = controller.args.pred_files
-            self.classifier_type = controller.classifier_types
-            self.nr_classifiers = len(controller.classifier_types)
-            self.src_dir = controller.src_dir
-        else:
-            self.outfile = controller.args.outfile
-            self.infile = controller.args.infile
-
+    @abstractmethod
     def run(self):
-        if self.mode == 'summary' or self.mode == 'plot':
-            files = [[self.infile, self.outfile]]
-
-        elif self.mode == 'auto':
-            files = []
-            if self.classifier == 'all':
-                classifiers = self.classifier_type
-            else:
-                classifiers = [self.classifier]
-
-            for classifier in classifiers:
-                outfile = (f"{self.src_dir}/data/predictions/{self.project_name}/"
-                           f"{self.project_name}_{classifier}_predict_summary.csv")
-                files.append([self.pred_files[classifier], outfile])
-
-        else:
-            ValueError("Postproc mode not supported")
-
-        if self.mode == 'summary' or self.auto_plus_sum:
-            self.make_summary(files)
-
-        if self.mode == 'plot' or self.auto_plus_plot:
-            if self.auto_plus_sum:
-                del_sum = False
-            elif self.mode == 'plot':
-                del_sum = self.plot_del_sum
-            else:
-                del_sum = True
-            self.make_plot(files, del_sum)
+        pass
 
     def make_summary(self, files):
         for file_list in files:
@@ -93,6 +48,51 @@ class ChemInfPostProc(object):
     def get(self, key):
         return getattr(self, key)
 
+
+class PostProcNormal(ChemInfPostProc):
+    def __init__(self, controller):
+        super(PostProcNormal, self).__init__(controller)
+        self.mode = controller.args.postproc_mode
+        self.outfile = controller.args.outfile
+        self.infile = controller.args.infile
+
+    def run(self):
+        files = [[self.infile, self.outfile]]
+        if self.mode == 'summary':
+            self.make_summary(files)
+        elif self.mode == 'plot':
+            self.make_plot(files, self.plot_del_sum)
+        else:
+            raise ModeError("postproc", self.mode)
+
+
+class PostProcAuto(ChemInfPostProc):
+    def __init__(self, controller):
+        super(PostProcAuto, self).__init__(controller)
+        self.mode = controller.args.mode
+        self.auto_plus_plot = (self.mode == 'auto' and controller.config.execute.auto_plus_plot)
+        self.auto_plus_sum = (self.mode == 'auto' and controller.config.execute.auto_plus_sum)
+        self.pred_files = controller.args.pred_files
+        self.classifier_type = controller.classifier_types
+        self.nr_classifiers = len(controller.classifier_types)
+        self.src_dir = controller.src_dir
+
+    def run(self):
+        files = []
+        if self.classifier == 'all':
+            classifiers = self.classifier_type
+        else:
+            classifiers = [self.classifier]
+        for classifier in classifiers:
+            outfile = (f"{self.src_dir}/data/predictions/{self.project_name}/"
+                       f"{self.project_name}_{classifier}_predict_summary.csv")
+            files.append([self.pred_files[classifier], outfile])
+
+        if self.auto_plus_sum:
+            self.make_summary(files)
+        if self.auto_plus_plot:
+            if self.auto_plus_sum:
+                del_sum = False
 
 def write_pred_summary_file(outfile, summary_array, significance_list):
     """Calculates standard ML metrics and CP metrics based on the

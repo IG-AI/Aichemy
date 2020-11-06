@@ -3,7 +3,6 @@ import argparse
 import os
 from datetime import datetime
 
-from ..cheminf.utils import boolean
 from ..cheminf.classifiers import CLASSIFIER_TYPES
 
 MODEL_MODES = ['build', 'improve', 'predict', 'validate']
@@ -36,16 +35,16 @@ class ChemInfInput(object):
     def argument_parser():
         """Specify what file will be read, what options to use
             and the name of the file to be outputted from the script.
-            """
+        """
 
         parser = argparse.ArgumentParser(prog="cheminf")
 
         parser.add_argument('--version', action='version', version='ChemInf Version 0.2')
 
-        parser_command = parser.add_subparsers(help="Choose a mode to run cheminf in", dest='mode')
+        parser_command = parser.add_subparsers(help="Choose a submode to run cheminf in", dest='submode')
 
         parser_auto = parser_command.add_parser('auto',
-                                                help="Automatic mode that preforms a complete data analysis of a "
+                                                help="Automatic submode that preforms a complete data analysis of a "
                                                      "dataset. The dataset is split in train/test sets with a certain "
                                                      "percentage defined in the classifier config file. The train set"
                                                      "will be used to train model(s) and the test set will"
@@ -68,10 +67,13 @@ class ChemInfInput(object):
         parser_preproc = parser_command.add_parser('preproc',
                                                    help="Preforms various post-precessing operations")
 
-        parser_preproc_mode = parser_preproc.add_subparsers(help="Choose a post processing mode to preform",
+        parser_preproc_mode = parser_preproc.add_subparsers(help="Choose a post processing submode to preform",
                                                             dest='preproc_mode')
 
         parser_preproc_balancing = parser_preproc_mode.add_parser('balancing',
+                                                                  help="Balancing a datasets and saves it")
+
+        parser_preproc_resample = parser_preproc_mode.add_parser('resample',
                                                                  help="Balancing a datasets and saves it")
 
         parser_preproc_split = parser_preproc_mode.add_parser('split',
@@ -83,17 +85,17 @@ class ChemInfInput(object):
         parser_postproc = parser_command.add_parser('postproc',
                                                     help="Preforms various post-precessing operations")
 
-        parser_postproc_mode = parser_postproc.add_subparsers(help="Choose a preprocessing mode to preform",
+        parser_postproc_mode = parser_postproc.add_subparsers(help="Choose a preprocessing submode to preform",
                                                               dest='postproc_mode')
 
         parser_postproc_summary = parser_postproc_mode.add_parser('summary',
-                                                                  help="Choose a preprocessing mode to preform")
+                                                                  help="Choose a preprocessing submode to preform")
 
         parser_postproc_plot = parser_postproc_mode.add_parser('plot',
-                                                               help="Choose a preprocessing mode to preform")
+                                                               help="Choose a preprocessing submode to preform")
         all_parsers = [parser_auto, parser_build, parser_improve, parser_predict,
-                       parser_validate, parser_preproc_balancing, parser_preproc_split, parser_preproc_trim,
-                       parser_postproc_summary, parser_postproc_plot]
+                       parser_validate, parser_preproc_balancing, parser_preproc_resample, parser_preproc_split,
+                       parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]
 
         for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate]:
             subparser.add_argument('-cl', '--classifier',
@@ -115,7 +117,7 @@ class ChemInfInput(object):
                                    help="Name of the current project, to which all out_puts "
                                         "will use as prefixes or in subdirectories with that name.")
 
-        for subparser in [parser_predict, parser_validate, parser_preproc_balancing,
+        for subparser in [parser_predict, parser_validate, parser_preproc_balancing, parser_preproc_resample,
                           parser_preproc_split, parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]:
             subparser.add_argument('-o', '--outfile',
                                    default=None,
@@ -135,7 +137,7 @@ class ChemInfInput(object):
                                         "or 'predict'). Otherwise it will be the default model directory "
                                         "(data/models).")
 
-        for subparser in [parser_preproc_split, parser_preproc_trim]:
+        for subparser in [parser_preproc_split, parser_preproc_trim, parser_preproc_resample]:
             subparser.add_argument('-pc', '--percentage',
                                    type=float,
                                    default=0.5,
@@ -160,13 +162,13 @@ class ChemInfInput(object):
                                    default=None,
                                    help="Specify a parameter in the configuration that will to be override ")
 
-        for subparser in [parser_auto, parser_preproc_balancing]:
+        for subparser in [parser_auto, parser_preproc_balancing, parser_preproc_resample]:
             subparser.add_argument('-ch', '--chunksize',
                                    default=100000,
                                    type=int,
                                    help="Specify size of chunks the files should be divided into.")
 
-        for subparser in [parser_preproc_balancing, parser_preproc_split, parser_preproc_trim]:
+        for subparser in [parser_preproc_balancing, parser_preproc_resample, parser_preproc_split, parser_preproc_trim]:
             subparser.add_argument('-nc', '--nr_core',
                                    default=1,
                                    type=int,
@@ -176,11 +178,11 @@ class ChemInfInput(object):
 
         if hasattr(args, 'utils_mode'):
             if args.utils_mode == 'balancing' and hasattr(args, 'num_core') and not hasattr(args, 'chunksize'):
-                parser.error("Utils balancing multicore mode has to be executed with chunking.")
+                parser.error("Utils balancing multicore submode has to be executed with chunking.")
 
             if (args.utils_mode == 'split' or args.utils_mode == 'trim') \
                     and (hasattr(args, 'num_core') or hasattr(args, 'chunksize')):
-                parser.error(f"Utils {args.utils_mode} be can't executed in multicore mode or with chunking.")
+                parser.error(f"Utils {args.utils_mode} be can't executed in multicore submode or with chunking.")
 
         return args
 
@@ -261,10 +263,12 @@ class ConfigExec(object):
         config.read(config_file)
 
         if operator_mode == 'auto':
-            self.auto_plus_balancing = boolean(config['auto']['auto+balancing'])
-            self.auto_plus_sum = boolean(config['auto']['auto+sum'])
-            self.auto_plus_plot = boolean(config['auto']['auto+plot'])
+            self.auto_plus_balancing = boolean(config['auto']['auto_plus_balancing'])
+            self.auto_plus_resample = boolean(config['auto']['auto_plus_resample'])
+            self.auto_plus_sum = boolean(config['auto']['auto_plus_sum'])
+            self.auto_plus_plot = boolean(config['auto']['auto_plus_plot'])
             self.train_test_ratio = float(config['auto']['train_test_ratio'])
+            self.sample_ratio = float(config['auto']['resample_ratio'])
 
         if operator_mode == 'postproc' or operator_mode == 'auto':
             self.error_level = int(config['postproc']['error_level'])
@@ -389,3 +393,7 @@ class ChemInfController(ChemInfInput):
 
 def config_to_list(config):
     return [int(x) for x in config.split("|")]
+
+
+def boolean(_bool):
+    return f'{_bool}'.lower() in ("yes", "true", "t", "1")

@@ -3,12 +3,13 @@ import sys
 
 import cloudpickle
 import numpy as np
+from abc import ABCMeta, abstractmethod
 
 from ..cheminf.classifiers import ChemInfClassifier
-from ..cheminf.preprocessing import ChemInfPreProc, split_array, cut_dataframe
-from ..cheminf.utils import read_dataframe
+from ..cheminf.preprocessing import ChemInfPreProc, split_dataframe
+from ..cheminf.utils import read_dataframe, split_array
 
-class ChemInfModel(object):
+class ChemInfModel(object, metaclass=ABCMeta):
     def __init__(self, controller, model_type):
         if controller.args.mode == 'auto':
             preproc = ChemInfPreProc(controller)
@@ -25,6 +26,22 @@ class ChemInfModel(object):
         self.project_name = controller.args.name
         self.models_dir = controller.args.models_dir
         self.classifier = ChemInfClassifier(self.type, self.config)
+
+    @abstractmethod
+    def build(self):
+        pass
+
+    @abstractmethod
+    def improve(self):
+        pass
+
+    @abstractmethod
+    def predict(self):
+        pass
+
+    @abstractmethod
+    def validate(self):
+        pass
 
     def save_models(self, model=None, iteration=0):
         if model is None:
@@ -87,7 +104,7 @@ class ChemInfModel(object):
     def get(self, key):
         return getattr(self, key)
 
-    def _get_dataframe(self, label):
+    def __get_dataframe(self, label):
         if self.auto_mode:
             file_path = self.paths[label]
         else:
@@ -113,9 +130,9 @@ class ModelRNDFOR(ChemInfModel):
         nr_models = self.config.nr_models
         prop_train_ratio = self.config.prop_train_ratio
 
-        train_dataframe = self._get_dataframe('train')
+        train_dataframe = self.__get_dataframe('train')
 
-        train_id_dataframe, train_data_dataframe = cut_dataframe(train_dataframe, index=2, axis=1, split=True)
+        train_id_dataframe, train_data_dataframe = split_dataframe(train_dataframe, index=2, axis=1)
         train_id = np.array([np.array(row.tolist()) for _, row in train_id_dataframe.iterrows()])
         train_data = np.array([np.array(row.tolist()) for _, row in train_data_dataframe.iterrows()])
         nr_of_training_samples = len(train_id)
@@ -156,8 +173,8 @@ class ModelRNDFOR(ChemInfModel):
         if not os.path.isdir(outfile_path):
             os.mkdir(outfile_path)
 
-        test_dataframe = self._get_dataframe('test')
-        test_id, test_data = cut_dataframe(test_dataframe, index=2, split=True)
+        test_dataframe = self.__get_dataframe('test')
+        test_id, test_data = split_dataframe(test_dataframe, index=2, axis=1)
         ncol = test_data.shape(1)
 
         # Reading parameters
@@ -241,12 +258,11 @@ class ModelRNDFOR(ChemInfModel):
                                f"{predict_data[i, 0]}\t"
                                f"{p_c_string}\n")
 
-    # Todo: Make validate mode work in current framework
+    # Todo: Make validate submode work in current framework
     def validate(self):
         """Cross validation using the K-fold method.
         """
-        from .utils import shuffle_arrays_in_unison
-        from ..cheminf.utils import read_array
+        from ..cheminf.utils import read_array, shuffle_arrays_in_unison
 
         # Reading parameters
         nr_models = self.config.nr_models
@@ -377,7 +393,7 @@ class ModelNN(ChemInfModel):
         from libs.nonconformist.nc import ClassifierNc, MarginErrFunc
         from libs.torchtools.optim import RangerLars
 
-        train_dataframe = self._get_dataframe('train')
+        train_dataframe = self.__get_dataframe('train')
 
         nr_models = self.config.nr_models
         val_ratio = self.config.val_ratio
@@ -461,7 +477,7 @@ class ModelNN(ChemInfModel):
     def predict(self):
         import pandas as pd
 
-        test_dataframe = self._get_dataframe('test')
+        test_dataframe = self.__get_dataframe('test')
         nr_models = self.config.nr_models
         sig = self.config.pred_sig
 
@@ -488,7 +504,7 @@ class ModelNN(ChemInfModel):
 
         results_dataframe.to_csv(self.outfile, sep='\t', mode='w+', index=False, header=True)
 
-    # Todo: Implement validate mode for nn
+    # Todo: Implement validate submode for nn
     def validate(self):
         raise NotImplementedError("Validation for neural network models aren't implemented yet.")
 

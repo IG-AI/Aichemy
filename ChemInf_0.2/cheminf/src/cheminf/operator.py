@@ -2,6 +2,7 @@ import time
 
 import numpy as np
 
+from ..cheminf.utils import UnsupportedClassifier, ModeError, Timer
 from ..cheminf.controller import ChemInfController
 
 
@@ -12,19 +13,19 @@ class ChemInfOperator(object):
         self.classifier = self.controller.args.classifier
 
         if self.mode == 'postproc':
-            from ..cheminf.postprocessing import ChemInfPostProc
-            self.postproc = ChemInfPostProc(self.controller)
+            from ..cheminf.postprocessing import PostProcNormal
+            self.postproc = PostProcNormal(self.controller)
 
         elif self.mode == 'preproc':
-            from ..cheminf.preprocessing import ChemInfPreProc
-            self.preproc = ChemInfPreProc(self.controller)
+            from ..cheminf.preprocessing import PreProcNormal
+            self.preproc = PreProcNormal(self.controller)
 
         elif self.mode == 'auto':
-            from ..cheminf.preprocessing import ChemInfPreProc
-            self.preproc = ChemInfPreProc(self.controller)
+            from ..cheminf.preprocessing import PreProcAuto
+            self.preproc = PreProcAuto(self.controller)
             if self.controller.config.execute.auto_plus_sum or self.controller.config.execute.auto_plus_plot:
-                from ..cheminf.postprocessing import ChemInfPostProc
-                self.postproc = ChemInfPostProc(self.controller)
+                from ..cheminf.postprocessing import PostProcAuto
+                self.postproc = PostProcAuto(self.controller)
             else:
                 self.postproc = None
 
@@ -44,7 +45,7 @@ class ChemInfOperator(object):
                     self.rndfor_model = None
 
                 else:
-                    raise ValueError("Not a supported classifier")
+                    raise UnsupportedClassifier(self.controller.args.classifier)
 
     @staticmethod
     def init_model(controller):
@@ -63,7 +64,7 @@ class ChemInfOperator(object):
             model = ModelNN(controller)
 
         else:
-            raise ValueError("Wrong classifier input, has to be either 'random_forest' or 'neural_network'")
+            raise UnsupportedClassifier(controller.args.classifier)
 
         return model
 
@@ -76,7 +77,6 @@ class ChemInfOperator(object):
     def get_utils(self, utils=None):
         if utils is None:
             utils = self.mode
-
         return getattr(self, utils)
 
     # Todo: Make classifier option 'all' functional
@@ -96,7 +96,6 @@ class ChemInfOperator(object):
                 model.predict()
 
         if self.mode == 'postproc' or self.mode in self.controller.auto_modes:
-            print('Gör postproc!')
             self.postproc.run()
 
         elif self.mode == 'preproc':
@@ -108,32 +107,10 @@ class ChemInfOperator(object):
                 model_activate = model.get(self.mode)
                 model_activate()
         else:
-            raise ValueError("Invalid operation mode")
-
-
-class Timer(object):
-    def __init__(self, func):
-        self.args = ChemInfController.get('args')
-        self.func = func
-
-    def __call__(self, *args):
-        begin = time.time()
-
-        self.func(*args)
-
-        end = time.time()
-        run_time = np.round(end - begin, decimals=2)
-        print("\nTIME PROFILE\n-----------------------------------")
-        print(f"Runtime for {self.func.__name__} was {run_time}s")
-        if self.func.__name__ == "multicore":
-            print(f"Runtime per core(s) with {self.func.__name__} was {(run_time * self.args.num_core)}s")
+            raise ModeError('operator', self.mode)
 
 
 @Timer
 def run_operator():
     cheminf = ChemInfOperator()
     cheminf.run()
-
-
-if __name__ == "__main__":
-    run_operator()

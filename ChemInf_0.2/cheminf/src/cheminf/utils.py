@@ -3,13 +3,92 @@ import re
 
 import numpy as np
 import pandas as pd
+from random import randrange
+
+
+class Timer(object):
+    num_core = ChemInfController.get('args.num_core')
+
+    def __init__(self, func):
+        self.func = func
+
+    def __call__(self, *args):
+        begin = time.time()
+
+        self.func(*args)
+
+        end = time.time()
+        run_time = np.round(end - begin, decimals=2)
+        print("\nTIME PROFILE\n-----------------------------------")
+        print(f"Runtime for {self.func.__name__} was {run_time}s")
+        if self.func.__name__ == "multicore":
+            print(f"Runtime per core(s) with {self.func.__name__} was {(run_time * self.num_core)}s")
+
+
+class ConnectionIter(object):
+    def __init__(self, iterable):
+        self.iterable = iterable
+        self._position = 0
+        self._max_position = len(iterable) - 1
+
+    def __iter__(self):
+        return self.iterable
+
+    def __next__(self):
+        if self._position == self._max_position:
+            raise StopIteration
+        else:
+            self._position += 1
+            return self._next_connection()
+
+    def __eq__(self, other):
+        return self.iterable == other
+
+    def __ne__(self, other):
+        return self.iterable != other
+
+    def __ge__(self, other):
+        return len(self.iterable) >= len(other)
+
+    def __gt__(self, other):
+        return len(self.iterable) > len(other)
+
+    def __le__(self, other):
+        return len(self.iterable) <= len(other)
+
+    def __lt__(self, other):
+        return len(self.iterable) < len(other)
+
+    def __set__(self, instance, value):
+        self.iterable = value
+
+    def _next_connection(self):
+        i = self._position
+        return self.iterable[:i] + self.iterable[i + 1:]
+
+    def next(self):
+        return self.__next__()
+
+    def seek(self, index):
+        self._position = index
+
+    def reset(self):
+        self.seek(0)
+
+
+def mutually_exclusive(arg, *args):
+    args = (arg,)+args
+    connected_args = ConnectionIter(args)
+    for i, arg in enumerate(args):
+        if (arg is None and [any(other_arg is None) for other_arg in connected_args]) \
+                or (arg is None and [any(other_arg) for other_arg in connected_args]):
+            raise ValueError("Either percentage or index most be specified, neither or both is not allowed")
 
 
 def read_parameters(infile, params_dict):
     """ Reads a file with hyperparameters for the
     classifier and parameters for the CP script. Updates the params_dict.
     """
-
     with open(infile, 'r') as f:
         for line in f:
             items = line.strip().split()
@@ -117,7 +196,7 @@ def save_dataframe(dataframe, outfile):
 
 
 def shuffle_dataframe(dataframe):
-    return dataframe.sample(frac=1, random_state=123, axis=0)
+    return dataframe.sample(frac=1, random_state=randrange(100, 999), axis=0)
 
 
 def shuffle_arrays_in_unison(array_a, array_b, seed=None):
@@ -131,5 +210,44 @@ def shuffle_arrays_in_unison(array_a, array_b, seed=None):
     np.random.shuffle(array_b)
 
 
-def boolean(_bool):
-    return f'{_bool}'.lower() in ("yes", "true", "t", "1")
+def split_array(array, percent_to_first, array_size=None, shuffle=False):
+    """This splits the array by percent of rows
+    and returns numpy slices (no copies).
+    """
+    if shuffle:
+        np.random.seed(123)
+        np.random.shuffle(array)
+
+    if array_size is None:
+        array_size = array.size
+
+    split_index = int(percent_to_first * array_size)
+
+    if array.ndim == 2:
+        array_1 = array[:split_index, :]
+        array_2 = array[split_index:, :]
+    elif array.ndim == 1:
+        array_1 = array[:split_index]
+        array_2 = array[split_index:]
+    else:
+        raise Exception("Split_array is only implemented for 1 and 2 dimensional arrays.")
+
+    return array_1, array_2
+
+
+class ModeError(Exception):
+    def __init__(self, mode, submode):
+        message = f"Submode '{submode}' isn't supported with {mode} in this code block"
+        super(Exception, self).__init__(message)
+
+
+class UnsupportedClassifier(Exception):
+    def __init__(self, classifier):
+        message = f"Unsupported classifier: {classifier}"
+        super(Exception, self).__init__(message)
+
+
+class NoMultiCoreSupport(Exception):
+    def __init__(self, mode):
+        message = f"{mode.capitalize()} doesn't have multicore support"
+        super(Exception, self).__init__(message)
