@@ -93,6 +93,10 @@ class PostProcAuto(ChemInfPostProc):
         if self.auto_plus_plot:
             if self.auto_plus_sum:
                 del_sum = False
+            else:
+                del_sum = True
+            self.make_plot(files, del_sum)
+
 
 def write_pred_summary_file(outfile, summary_array, significance_list):
     """Calculates standard ML metrics and CP metrics based on the

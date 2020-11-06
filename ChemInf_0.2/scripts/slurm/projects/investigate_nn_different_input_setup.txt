@@ -1,0 +1,5 @@
+auto_plus_resample1 auto_plus_resample:True
+auto_plus_resample2 auto_plus_resample:True
+auto_plus_resample3 auto_plus_resample:True
+auto_plus_resample4 auto_plus_resample:True
+auto_plus_resample5 auto_plus_resample:True

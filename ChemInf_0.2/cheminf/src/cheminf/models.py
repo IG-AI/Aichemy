@@ -6,13 +6,13 @@ import numpy as np
 from abc import ABCMeta, abstractmethod
 
 from ..cheminf.classifiers import ChemInfClassifier
-from ..cheminf.preprocessing import ChemInfPreProc, split_dataframe
+from ..cheminf.preprocessing import PreProcAuto, split_dataframe
 from ..cheminf.utils import read_dataframe, split_array
 
 class ChemInfModel(object, metaclass=ABCMeta):
     def __init__(self, controller, model_type):
         if controller.args.mode == 'auto':
-            preproc = ChemInfPreProc(controller)
+            preproc = PreProcAuto(controller)
             paths = preproc.run()
             self.paths = paths
             self.auto_mode = True
@@ -104,7 +104,7 @@ class ChemInfModel(object, metaclass=ABCMeta):
     def get(self, key):
         return getattr(self, key)
 
-    def __get_dataframe(self, label):
+    def _get_dataframe(self, label):
         if self.auto_mode:
             file_path = self.paths[label]
         else:
@@ -130,7 +130,7 @@ class ModelRNDFOR(ChemInfModel):
         nr_models = self.config.nr_models
         prop_train_ratio = self.config.prop_train_ratio
 
-        train_dataframe = self.__get_dataframe('train')
+        train_dataframe = self._get_dataframe('train')
 
         train_id_dataframe, train_data_dataframe = split_dataframe(train_dataframe, index=2, axis=1)
         train_id = np.array([np.array(row.tolist()) for _, row in train_id_dataframe.iterrows()])
@@ -173,7 +173,7 @@ class ModelRNDFOR(ChemInfModel):
         if not os.path.isdir(outfile_path):
             os.mkdir(outfile_path)
 
-        test_dataframe = self.__get_dataframe('test')
+        test_dataframe = self._get_dataframe('test')
         test_id, test_data = split_dataframe(test_dataframe, index=2, axis=1)
         ncol = test_data.shape(1)
 
@@ -393,7 +393,7 @@ class ModelNN(ChemInfModel):
         from libs.nonconformist.nc import ClassifierNc, MarginErrFunc
         from libs.torchtools.optim import RangerLars
 
-        train_dataframe = self.__get_dataframe('train')
+        train_dataframe = self._get_dataframe('train')
 
         nr_models = self.config.nr_models
         val_ratio = self.config.val_ratio
@@ -477,7 +477,7 @@ class ModelNN(ChemInfModel):
     def predict(self):
         import pandas as pd
 
-        test_dataframe = self.__get_dataframe('test')
+        test_dataframe = self._get_dataframe('test')
         nr_models = self.config.nr_models
         sig = self.config.pred_sig
 

@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 
 from ..cheminf.classifiers import CLASSIFIER_TYPES
+from ..cheminf.utils import ModeError
 
 MODEL_MODES = ['build', 'improve', 'predict', 'validate']
 DATA_MODES = ['postproc', 'preproc']
@@ -27,7 +28,6 @@ class ChemInfInput(object):
         for mode in SUBMODES:
             if not hasattr(self.args, mode):
                 setattr(self.args, mode, None)
-
         self.config = ChemInfConfig(self.args.mode, self.args.classifier, config_file, self.args.override_config)
 
     @staticmethod
@@ -98,7 +98,7 @@ class ChemInfInput(object):
 
         for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate]:
             subparser.add_argument('-cl', '--classifier',
-                                   default='all',
+                                   default='nn',
                                    choices=['rndfor', 'nn', 'all'],
                                    help="Choose one or all classifiers for model operations")
 
@@ -329,7 +329,7 @@ class ChemInfController(ChemInfInput):
 
     def update_outfile(self):
         infile_name, infile_extension = os.path.splitext(os.path.basename(self.args.infile))
-        if not self.args.outfile:
+        if self.args.outfile is None or self.args.outfile2 is None:
             if self.args.mode == 'preproc':
                 if self.args.preproc_mode == 'trim':
                     self.args.outfile = f"{self.src_dir}/data/{infile_name}_trimmed{infile_extension}"
@@ -341,9 +341,12 @@ class ChemInfController(ChemInfInput):
                     self.args.outfile = f"{self.src_dir}/data/{infile_name}_resampled{infile_extension}"
 
                 elif self.args.preproc_mode == 'split':
-                    self.args.outfile = f"{self.src_dir}/data/{infile_name}_train{infile_extension}"
-                    if not self.args.outfile2:
+                    if self.args.outfile is None:
+                        self.args.outfile = f"{self.src_dir}/data/{infile_name}_train{infile_extension}"
+                    if self.args.outfile2 is None:
                         self.args.outfile2 = f"{self.src_dir}/data/{infile_name}_test{infile_extension}"
+                else:
+                    ModeError(self.args.mode, self.args.preproc_mode)
 
             elif self.args.mode == 'postproc':
                 self.args.outfile = f"{self.src_dir}/data/predictions/{self.name}/" \

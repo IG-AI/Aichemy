@@ -12,8 +12,10 @@
 #SBATCH --mail-user daniel.agstrand.5971@student.uu.se
 #SBATCH --mail-type=stop,fail
 
-name=$(awk "NR==${SLURM_ARRAY_TASK_ID}" $NAMES)
-config_override=$(awk "NR==${SLURM_ARRAY_TASK_ID}" $CONFIGS)
+awk '{print $1=names; print $2=configs}' $SETUP
+
+name=$(awk "NR==${SLURM_ARRAY_TASK_ID}" $names)
+config_override=$(awk "NR==${SLURM_ARRAY_TASK_ID}" $configs)
 work_dir=/proj/carlssonlab/users/x_danag/ChemInf/ChemInf_0.2
 
 cd $work_dir

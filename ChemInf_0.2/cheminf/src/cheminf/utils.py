@@ -5,9 +5,10 @@ import time
 import numpy as np
 import pandas as pd
 from random import randrange
+from functools import wraps
 
 
-class WrapperTimer(object):
+class Timer(object):
     def __init__(self, func):
         self.func = func
 
@@ -22,64 +23,16 @@ class WrapperTimer(object):
         print(f"Runtime for {self.func.__name__} was {run_time}s")
 
 
-class ConnectionIter(object):
-    def __init__(self, iterable):
-        self.iterable = iterable
-        self._position = 0
-        self._max_position = len(iterable) - 1
-
-    def __iter__(self):
-        return self.iterable
-
-    def __next__(self):
-        if self._position == self._max_position:
-            raise StopIteration
-        else:
-            self._position += 1
-            return self._next_connection()
-
-    def __eq__(self, other):
-        return self.iterable == other
-
-    def __ne__(self, other):
-        return self.iterable != other
-
-    def __ge__(self, other):
-        return len(self.iterable) >= len(other)
-
-    def __gt__(self, other):
-        return len(self.iterable) > len(other)
-
-    def __le__(self, other):
-        return len(self.iterable) <= len(other)
-
-    def __lt__(self, other):
-        return len(self.iterable) < len(other)
-
-    def __set__(self, instance, value):
-        self.iterable = value
-
-    def _next_connection(self):
-        i = self._position
-        return self.iterable[:i] + self.iterable[i + 1:]
-
-    def next(self):
-        return self.__next__()
-
-    def seek(self, index):
-        self._position = index
-
-    def reset(self):
-        self.seek(0)
-
-
-def mutually_exclusive(arg, *args):
-    args = (arg,)+args
-    connected_args = ConnectionIter(args)
-    for i, arg in enumerate(args):
-        if (arg is None and [any(other_arg is None) for other_arg in connected_args]) \
-                or (arg is None and [any(other_arg) for other_arg in connected_args]):
-            raise ValueError("Either percentage or index most be specified, neither or both is not allowed")
+def mutually_exclusive(keyword, *keywords):
+    keywords = (keyword,)+keywords
+    def wrapper(func):
+        @wraps(func)
+        def inner(*args, **kwargs):
+            if sum(k in keywords for k in kwargs) != 1:
+                raise TypeError('You must specify exactly one of {}'.format(', '.join(keywords)))
+            return func(*args, **kwargs)
+        return inner
+    return wrapper
 
 
 def read_parameters(infile, params_dict):
@@ -247,4 +200,9 @@ class UnsupportedClassifier(Exception):
 class NoMultiCoreSupport(Exception):
     def __init__(self, mode):
         message = f"{mode.capitalize()} doesn't have multicore support"
+        super(Exception, self).__init__(message)
+
+class MutuallyExclusive(Exception):
+    def __init__(self, arg1, arg2):
+        message = f"You must specify exactly one of {arg1} and {arg2}"
         super(Exception, self).__init__(message)

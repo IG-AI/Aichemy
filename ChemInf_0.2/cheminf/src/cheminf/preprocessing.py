@@ -1,11 +1,13 @@
 import os
 import numpy as np
 import pandas as pd
+
+from pandas.io.parsers import TextFileReader as Chunks
 from sklearn.utils import resample
 from random import randrange
 from abc import ABCMeta, abstractmethod
 
-from ..cheminf.utils import read_dataframe, save_dataframe, shuffle_dataframe, mutually_exclusive, \
+from ..cheminf.utils import read_dataframe, save_dataframe, shuffle_dataframe, MutuallyExclusive, \
     ModeError, NoMultiCoreSupport
 
 MULTICORE_SUPPORT = ['balancing', 'resample']
@@ -30,7 +32,7 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
     def run(self):
         pass
 
-    def _single_thread(self, submode, dataframes=None, outfile=None, outfile2=None, save=True):
+    def _single_core(self, submode, dataframes=None, outfile=None, outfile2=None, save=True):
         if dataframes is None:
             infile = self.infile
             dataframes = read_dataframe(infile, self.chunksize)
@@ -40,7 +42,7 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
         if submode == 'split':
             if outfile2 is None:
                 outfile2 = self.outfile2
-            dataframe_large, dataframe_small = self.split(submode, dataframes)
+            dataframe_large, dataframe_small = self.split(dataframes)
             if save:
                 save_dataframe(dataframe_large, outfile)
                 save_dataframe(dataframe_small, outfile2)
@@ -105,14 +107,15 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
             dataframe_results = pd.DataFrame()
 
             if self.nr_core == 1:
-                print1 = f"\nStart creating balanced dataframe"
+                print1 = f"\nStart {submode} dataframe"
                 if self.chunksize:
                     print2 = f" in chunks with size {self.chunksize} rows"
                 else:
                     print2 = ""
                 print(print1 + print2)
 
-            if self.nr_core == 1:
+            # Checks that ChemInf operates in single core and that the dataframe is chunked
+            if self.nr_core == 1 and isinstance(dataframes, Chunks):
                 for i, chunk in enumerate(dataframes):
                     if self.chunksize:
                         print(f"\nWorking on chunk {i}\n-----------------------------------")
@@ -123,14 +126,14 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
 
                     dataframe_results = pd.concat([dataframe_results, dataframe_chunk])
 
-            elif self.nr_core > 1:
+            elif self.nr_core > 1 or isinstance(dataframes, pd.DataFrame):
                 if submode == 'balancing':
                     dataframe_results = balancing_dataframe(dataframes, percentage=self.percentage)
                 elif submode == 'resample':
                     dataframe_results = resample_dataframe(dataframes, percentage=self.percentage)
 
             else:
-                raise ValueError("Unrecognized value for 'nr_core'")
+                raise ValueError("Unrecognized instance of 'dataframes'")
 
             print("\nShuffles the dataset")
             return shuffle_dataframe(dataframe_results)
@@ -143,7 +146,6 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
     def trim(self, dataframe=None, index=None):
         return self._cut('split', dataframe, index)
 
-    # Todo: Implement chunking-support for trim and split submode
     def _cut(self, submode, dataframe=None, index=None):
         if submode != 'balancing' and submode != 'resample':
             if dataframe is None:
@@ -178,7 +180,7 @@ class PreProcNormal(ChemInfPreProc):
             else:
                 raise NoMultiCoreSupport(self.submode)
         else:
-            self._single_thread(self.submode)
+            self._single_core(self.submode)
 
 
 # Todo: Implement multicore support fro preproc-auto mode
@@ -204,34 +206,36 @@ class PreProcAuto(ChemInfPreProc):
 
     def _run_auto_mode(self, submode, dataframe=None, save=True):
         if submode == 'split':
-            train_file_path = self.__make_auto_outfile('train')
-            test_file_path = self.__make_auto_outfile('test')
+            train_file_path = self._make_auto_outfile('train')
+            test_file_path = self._make_auto_outfile('test')
             self.percentage = self.train_test_ratio
             if save:
-                self._single_thread(submode, dataframe, outfile=train_file_path, outfile2=test_file_path)
+                self._single_core(submode, dataframe, outfile=train_file_path, outfile2=test_file_path)
                 self.percentage = None
                 return {'train': train_file_path, 'test': test_file_path}
             else:
-                train_dataframe, test_dataframe = self._single_thread(submode, dataframe, save=False)
+                train_dataframe, test_dataframe = self._single_core(submode, dataframe, save=False)
                 self.percentage = None
                 return train_dataframe, test_dataframe
 
         elif submode == 'resample' or submode == 'balancing':
             if submode == 'resample':
                 self.percentage = self.sample_ratio
-            file_path = self.__make_auto_outfile(submode)
+            elif submode == 'balancing':
+                self.percentage = 1
+            file_path = self._make_auto_outfile(submode)
             if save:
-                dataframe_path = self._single_thread('balancing', dataframe, outfile=file_path)
+                dataframe_path = self._single_core(submode, dataframe, outfile=file_path)
                 self.percentage = None
                 return dataframe_path
             else:
-                dataframe = self._single_thread('balancing', dataframe, save=False)
+                dataframe = self._single_core(submode, dataframe, save=False)
                 self.percentage = None
                 return dataframe
         else:
             ModeError(self.mode, submode)
 
-    def __make_auto_outfile(self, suffix, file=None):
+    def _make_auto_outfile(self, suffix, file=None):
         if file is None:
             file = self.infile
 
@@ -244,10 +248,11 @@ class PreProcAuto(ChemInfPreProc):
 
 
 def balancing_dataframe(dataframe, percentage=1):
+    print(f"PERCENTAGE: {percentage}")
     dataframe_class0 = dataframe[dataframe['class'] == 0]
     dataframe_class1 = dataframe[dataframe['class'] == 1]
 
-    dataframe_class1_resampled = resample_dataframe(dataframe_class1, percentage)
+    dataframe_class1_resampled = resample_dataframe(dataframe_class1, 1)
 
     data_div = dataframe_class1_resampled['class'].value_counts()
     nr_samples = int(np.round(data_div[1], decimals=0))
@@ -265,7 +270,8 @@ def resample_dataframe(dataframe, percentage=1):
 
 
 def split_dataframe(dataframe, percentage=None, index=None, axis=0):
-    mutually_exclusive(percentage, index)
+    if (percentage and index) or (percentage is None and index is None):
+        raise MutuallyExclusive('percentage', 'index')
     if percentage:
         index = int(np.round(len(dataframe) * percentage))
 
@@ -282,7 +288,8 @@ def split_dataframe(dataframe, percentage=None, index=None, axis=0):
 
 
 def trim_dataframe(dataframe, percentage=None, index=None, axis=0):
-    mutually_exclusive(percentage, index)
+    if (percentage and index) or (percentage is None and index is None):
+        raise MutuallyExclusive('percentage', 'index')
     if percentage:
         index = int(np.round(len(dataframe) * percentage))
 
