@@ -84,7 +84,7 @@ class PostProcAuto(ChemInfPostProc):
         else:
             classifiers = [self.classifier]
         for classifier in classifiers:
-            outfile = (f"{self.src_dir}/data/predictions/{self.name}/"
+            outfile = (f"{self.src_dir}/data/{self.name}/predictions/"
                        f"{self.name}_{classifier}_predict_summary.csv")
             files.append([self.pred_files[classifier], outfile])
 

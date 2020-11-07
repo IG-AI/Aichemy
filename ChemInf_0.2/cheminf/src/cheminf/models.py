@@ -12,9 +12,9 @@ from ..cheminf.utils import read_dataframe, split_array
 class ChemInfModel(object, metaclass=ABCMeta):
     def __init__(self, controller, model_type):
         if controller.args.mode == 'auto':
+            self.auto_save_preproc = controller.config.execute.auto_save_preproc
             preproc = PreProcAuto(controller)
-            paths = preproc.run()
-            self.paths = paths
+            self.data = preproc.run()
             self.auto_mode = True
         else:
             self.infile = controller.args.infile
@@ -106,10 +106,14 @@ class ChemInfModel(object, metaclass=ABCMeta):
 
     def _get_dataframe(self, label):
         if self.auto_mode:
-            file_path = self.paths[label]
+            if self.auto_save_preproc:
+                file_path = self.data[label]
+                dataframe = read_dataframe(file_path)
+            else:
+                dataframe = self.data[label]
         else:
             file_path = self.infile
-        dataframe = read_dataframe(file_path)
+            dataframe = read_dataframe(file_path)
         return dataframe
 
 
@@ -500,7 +504,8 @@ class ModelNN(ChemInfModel):
             p_value_results.append(pd.DataFrame(p_value).astype('float32'))
 
         p_value_dataframe = pd.concat(p_value_results, axis=1).groupby(level=0, axis=1).median()
-        results_dataframe = pd.concat([test_dataframe['id'], test_dataframe['class'], p_value_dataframe], axis=1)
+        results_dataframe = pd.concat([test_dataframe['id'], test_dataframe['class'], p_value_dataframe],
+                                      axis=1)
 
         results_dataframe.to_csv(self.outfile, sep='\t', mode='w+', index=False, header=True)
 

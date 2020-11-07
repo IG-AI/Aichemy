@@ -96,10 +96,11 @@ def read_array(infile, data_type):
     return id, data
 
 
-def read_dataframe(file, chunksize=None, shuffle=False):
-    print("\nReading from {file}".format(file=file))
-    with open(file) as f:
-        first_line = next(f)
+def read_dataframe(infile, chunksize=None, shuffle=False):
+    print("\nReading from {file}".format(file=infile))
+
+    with open(infile) as fin:
+        first_line = next(fin)
         line_data = re.split(" |\t|[|]", first_line)
         num_cols = len(line_data)
 
@@ -111,7 +112,7 @@ def read_dataframe(file, chunksize=None, shuffle=False):
         columns_types[str(i)] = 'int8'
 
     if chunksize:
-        dataframe = pd.read_csv(file,
+        dataframe = pd.read_csv(infile,
                                 sep='\s+',
                                 skip_blank_lines=True,
                                 header=None,
@@ -122,7 +123,7 @@ def read_dataframe(file, chunksize=None, shuffle=False):
                                 engine='c')
 
     else:
-        dataframe = pd.read_csv(file,
+        dataframe = pd.read_csv(infile,
                                 sep='\s+',
                                 skip_blank_lines=True,
                                 header=None,
