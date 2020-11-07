@@ -177,13 +177,14 @@ class ChemInfInput(object):
 
         args = parser.parse_args()
 
-        if hasattr(args, 'utils_mode'):
-            if args.utils_mode == 'balancing' and hasattr(args, 'num_core') and not hasattr(args, 'chunksize'):
-                parser.error("Utils balancing multicore submode has to be executed with chunking.")
+        if hasattr(args, 'preproc_mode'):
+            if (args.preproc_mode == 'balancing' or args.preproc_mode == 'balancing')\
+                    and args.num_core and not args.chunksize:
+                parser.error("Multicore has to be executed with chunking in preproc mode.")
 
-            if (args.utils_mode == 'split' or args.utils_mode == 'trim') \
-                    and (hasattr(args, 'num_core') or hasattr(args, 'chunksize')):
-                parser.error(f"Utils {args.utils_mode} be can't executed in multicore submode or with chunking.")
+            if (args.preproc_mode == 'split' or args.preproc_mode == 'trim') \
+                    and (args.num_core or args.chunksize):
+                parser.error(f"Preproc {args.preproc_mode} be can't executed in multicore submode or with chunking.")
 
         return args
 
@@ -264,6 +265,7 @@ class ConfigExec(object):
         config.read(config_file)
 
         if operator_mode == 'auto':
+            self.auto_save_preproc = boolean(config['auto']['auto_save_preproc'])
             self.auto_plus_balancing = boolean(config['auto']['auto_plus_balancing'])
             self.auto_plus_resample = boolean(config['auto']['auto_plus_resample'])
             self.auto_plus_sum = boolean(config['auto']['auto_plus_sum'])
@@ -282,6 +284,8 @@ class ChemInfController(ChemInfInput):
     auto_modes = AUTO_MODES
     classifier_types = CLASSIFIER_TYPES
     scr = None
+    project_dir = None
+    predictions_dir = None
     name = None
     args = None
     config = None
@@ -303,6 +307,7 @@ class ChemInfController(ChemInfInput):
         super(ChemInfController, self).__init__(config_files)
         self.name = self.args.name
         self.update_infile()
+        self.add_project_dir()
 
         if self.args.mode in self.model_modes or self.args.mode in self.auto_modes:
             self.update_model_path()
@@ -327,6 +332,14 @@ class ChemInfController(ChemInfInput):
                                         f"directory in the ChemInf source directory ({self.src_dir}/data) has been "
                                         f"explored")
 
+    def add_project_dir(self):
+        self.project_dir = f"{self.src_dir}/data/{self.name}"
+        try:
+            os.mkdir(self.project_dir)
+            print(f"Created the model directory: {self.project_dir}")
+        except FileExistsError:
+            pass
+
     def update_outfile(self):
         infile_name, infile_extension = os.path.splitext(os.path.basename(self.args.infile))
         if self.args.outfile is None or self.args.outfile2 is None:
@@ -349,12 +362,12 @@ class ChemInfController(ChemInfInput):
                     ModeError(self.args.mode, self.args.preproc_mode)
 
             elif self.args.mode == 'postproc':
-                self.args.outfile = f"{self.src_dir}/data/predictions/{self.name}/" \
+                self.args.outfile = f"{self.src_dir}/data/{self.name}/predictions/" \
                                     f"{infile_name}_summary{infile_extension}"
 
     def update_model_path(self):
         if not self.args.models_dir:
-            self.args.models_dir = f"{self.src_dir}/data/models/{self.name}"
+            self.args.models_dir = f"{self.project_dir}/models"
 
         try:
             os.mkdir(self.args.models_dir)
@@ -367,16 +380,23 @@ class ChemInfController(ChemInfInput):
             _pred_files = {}
             if self.args.outfile is None:
                 for i, _classifier in enumerate(classifier_types):
-                    path = f"{self.src_dir}/data/predictions/{self.name}/" \
-                           f"{self.name}_{_classifier}_predict.csv"
+                    path = f"{self.predictions_dir}/{self.name}_{_classifier}_predict.csv"
                     _pred_files[_classifier] = path
             else:
-                outfile_name, outfile_extension = os.path.splitext(os.path.basename(self.args.outfile))
+                outfile_path, outfile = os.path.split(self.args.outfile)
+                outfile_name, outfile_extension = os.path.splitext(outfile)
                 for i, _classifier in enumerate(classifier_types):
-                    path = f"{outfile_name}_{_classifier}{outfile_extension}"
+                    path = f"{outfile_path}{outfile_name}_{_classifier}{outfile_extension}"
                     _pred_files[_classifier] = path
                     self.update_outfile()
             return _pred_files
+
+        self.predictions_dir = f"{self.project_dir}/predictions"
+        try:
+            os.mkdir(self.predictions_dir)
+            print(f"Created the model directory: {self.predictions_dir}")
+        except FileExistsError:
+            pass
 
         if self.args.classifier == 'all':
             if not self.args.mode == 'build':

@@ -189,6 +189,7 @@ class PreProcAuto(ChemInfPreProc):
         super(PreProcAuto, self).__init__(controller)
         self.train_test_ratio = controller.config.execute.train_test_ratio
         self.resample_ratio = controller.config.execute.resample_ratio
+        self.auto_save_preproc = controller.config.execute.auto_save_preproc
         self.auto_plus_balancing = (self.mode == 'auto' and controller.config.execute.auto_plus_balancing)
         self.auto_plus_resample = (self.mode == 'auto' and controller.config.execute.auto_plus_resample)
 
@@ -202,7 +203,12 @@ class PreProcAuto(ChemInfPreProc):
             dataframe = self._run_auto_mode('resample', save=False)
         else:
             dataframe = None
-        return self._run_auto_mode('split', dataframe)
+
+        if self.auto_save_preproc:
+            data = self._run_auto_mode('split', dataframe)
+        else:
+            data = self._run_auto_mode('split', dataframe, save=False)
+        return data
 
     def _run_auto_mode(self, submode, dataframe=None, save=True):
         if submode == 'split':
@@ -214,9 +220,13 @@ class PreProcAuto(ChemInfPreProc):
                 self.percentage = None
                 return {'train': train_file_path, 'test': test_file_path}
             else:
+                # Todo: Fix bug with piping of dataframe to models
+                raise NotImplementedError("Not saving preproc results not yet implemented")
+                """
                 train_dataframe, test_dataframe = self._single_core(submode, dataframe, save=False)
                 self.percentage = None
-                return train_dataframe, test_dataframe
+                return {'train': train_dataframe, 'test': test_dataframe}
+                """
 
         elif submode == 'resample' or submode == 'balancing':
             if submode == 'resample':
@@ -241,10 +251,7 @@ class PreProcAuto(ChemInfPreProc):
 
         file_dir = os.path.basename(file)
         file_name, file_extension = os.path.splitext(file_dir)
-        if self.auto_plus_balancing:
-            return f"{self.src_dir}/data/{file_name}_{suffix}{file_extension}"
-        else:
-            return f"{self.src_dir}/data/{file_name}_{suffix}{file_extension}"
+        return f"{self.src_dir}/data/{self.name}/{file_name}_{suffix}{file_extension}"
 
 
 def balancing_dataframe(dataframe, percentage=1):
