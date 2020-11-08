@@ -3,6 +3,7 @@
 #SBATCH --job-name=cheminf_auto
 #SBATCH --time=24:00:00
 
+#SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=100G
@@ -13,9 +14,6 @@
 #SBATCH --mail-type=stop,fail
 
 #SBATCH --array=1-14
-
-SETUP=scripts/slurm/projects/inv_nn_different_sampling_setup.csv
-INFILE=cheminf/data/d2_full.csv
 
 work_dir=/proj/carlssonlab/users/x_danag/ChemInf/ChemInf_0.2
 
@@ -33,4 +31,4 @@ echo -e "\n---------------------------------------------------------------------
 singularity exec /proj/carlssonlab/singularity/frontline.simg \
 python cheminf/ auto -cl nn -i $INFILE -n $name -cf $config_override
 
-# sbatch scripts/slurm/sbatch_cheminf_auto.sh
+# sbatch --export=ALL,INFILE=cheminf/data/d2_full.csv,SETUP=scripts/slurm/projects/inv_nn_different_sampling_setup.csv scripts/slurm/sbatch_cheminf_auto.sh
