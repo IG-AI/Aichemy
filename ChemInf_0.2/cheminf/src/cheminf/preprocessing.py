@@ -261,7 +261,7 @@ def balancing_dataframe(dataframe, percentage=1):
     dataframe_class1_resampled = resample_dataframe(dataframe_class1, 1)
 
     data_div = dataframe_class1_resampled['class'].value_counts()
-    nr_samples = int(np.round(data_div[1], decimals=0))
+    nr_samples = int(np.round(data_div[1]*percentage, decimals=0))
 
     dataframe_class0_balancing = resample(dataframe_class0,
                                           replace=False,
