@@ -26,7 +26,7 @@ echo "START LABELING OF: "$INFILE
 echo -e "\n-------------------------------------------\n"
 
 echo -e "Start counting data in file\n"
-nlines=$(awk -F "\t" '{print $1}' $INFILE | wc -l);
+nlines=$(awk -F"\t" '{print $1}' $INFILE | wc -l);
 threshold=$(echo "(0.01*$nlines) / 1" | bc)
 
 echo -e "Finding class 1 in file\n"
