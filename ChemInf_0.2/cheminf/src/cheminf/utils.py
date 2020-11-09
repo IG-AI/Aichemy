@@ -203,6 +203,7 @@ class NoMultiCoreSupport(Exception):
         message = f"{mode.capitalize()} doesn't have multicore support"
         super(Exception, self).__init__(message)
 
+
 class MutuallyExclusive(Exception):
     def __init__(self, arg1, arg2):
         message = f"You must specify exactly one of {arg1} and {arg2}"
