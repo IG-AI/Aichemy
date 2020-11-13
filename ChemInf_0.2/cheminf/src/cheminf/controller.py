@@ -216,10 +216,11 @@ class ChemInfConfig(object):
             value_type = old_value.__class__.__name__
 
             if f"{value_type}" == 'bool':
-                value_type = 'boolean'
+                value = boolean(value)
             elif f"{value_type}" == 'list':
-                value_type = 'config_to_list'
-            value = eval(f"{value_type}({value})")
+                value = config_to_list(value)
+            else:
+                value = eval(f"{value_type}({value})")
             obj = eval(f"self.{attr_pos}")
             print(f"Changed configuration for '{key}' from '{old_value}' to '{value}'")
             setattr(obj, key, value)
