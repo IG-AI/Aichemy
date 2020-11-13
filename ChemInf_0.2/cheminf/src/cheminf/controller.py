@@ -111,7 +111,7 @@ class ChemInfInput(object):
         date = datetime.now()
         current_date = date.strftime("%d-%m-%Y")
         for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate,
-                          parser_preproc_split,
+                          parser_preproc_split, parser_preproc_balancing,
                           parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]:
             subparser.add_argument('-n', '--name',
                                    default=current_date,
@@ -165,7 +165,7 @@ class ChemInfInput(object):
 
         for subparser in [parser_auto, parser_preproc_balancing, parser_preproc_resample]:
             subparser.add_argument('-ch', '--chunksize',
-                                   default=100000,
+                                   default=None,
                                    type=int,
                                    help="Specify size of chunks the files should be divided into.")
 
@@ -178,8 +178,8 @@ class ChemInfInput(object):
         args = parser.parse_args()
 
         if hasattr(args, 'preproc_mode'):
-            if (args.preproc_mode == 'balancing' or args.preproc_mode == 'balancing')\
-                    and args.num_core and not args.chunksize:
+            if (args.preproc_mode == 'balancing' or args.preproc_mode == 'resample')\
+                    and (args.nr_core and not args.chunksize):
                 parser.error("Multicore has to be executed with chunking in preproc mode.")
 
             if (args.preproc_mode == 'split' or args.preproc_mode == 'trim') \

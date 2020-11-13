@@ -119,18 +119,26 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
                 for i, chunk in enumerate(dataframes):
                     if self.chunksize:
                         print(f"\nWorking on chunk {i}\n-----------------------------------")
-                    if submode == 'balancing':
-                        dataframe_chunk = balancing_dataframe(chunk, percentage=self.percentage)
-                    elif submode == 'resample':
-                        dataframe_chunk = resample_dataframe(chunk, percentage=self.percentage)
+                        try:
+                            if submode == 'balancing':
+                                dataframe_chunk = balancing_dataframe(chunk, percentage=self.percentage)
+                            elif submode == 'resample':
+                                dataframe_chunk = resample_dataframe(chunk, percentage=self.percentage)
 
-                    dataframe_results = pd.concat([dataframe_results, dataframe_chunk])
+                            dataframe_results = pd.concat([dataframe_results, dataframe_chunk])
+
+                        except KeyError:
+                            pass
 
             elif self.nr_core > 1 or isinstance(dataframes, pd.DataFrame):
-                if submode == 'balancing':
-                    dataframe_results = balancing_dataframe(dataframes, percentage=self.percentage)
-                elif submode == 'resample':
-                    dataframe_results = resample_dataframe(dataframes, percentage=self.percentage)
+                try:
+                    if submode == 'balancing':
+                        dataframe_results = balancing_dataframe(dataframes, percentage=self.percentage)
+                    elif submode == 'resample':
+                        dataframe_results = resample_dataframe(dataframes, percentage=self.percentage)
+
+                except KeyError:
+                    pass
 
             else:
                 raise ValueError("Unrecognized instance of 'dataframes'")
@@ -254,6 +262,7 @@ class PreProcAuto(ChemInfPreProc):
         return f"{self.src_dir}/data/{self.name}/{file_name}_{suffix}{file_extension}"
 
 
+# Todo: Make the amount of classes dynamic
 def balancing_dataframe(dataframe, percentage=1):
     dataframe_class0 = dataframe[dataframe['class'] == 0]
     dataframe_class1 = dataframe[dataframe['class'] == 1]
@@ -263,10 +272,11 @@ def balancing_dataframe(dataframe, percentage=1):
     data_div = dataframe_class1_resampled['class'].value_counts()
     nr_samples = int(np.round(data_div[1]*percentage, decimals=0))
 
-    dataframe_class0_balancing = resample(dataframe_class0,
-                                          replace=False,
-                                          n_samples=nr_samples,
-                                          random_state=randrange(100, 999))
+    if nr_samples > 1:
+        dataframe_class0_balancing = resample(dataframe_class0,
+                                              replace=False,
+                                              n_samples=nr_samples,
+                                              random_state=randrange(100, 999))
 
     return pd.concat([dataframe_class0_balancing, dataframe_class1_resampled])
 
