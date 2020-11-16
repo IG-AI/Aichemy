@@ -51,10 +51,11 @@ class Timer(object):
 
     def get_laps_runtime(self):
         if self.__verbose >= 1:
-            [print(f"Runtime for lap {i}: {runtime['h']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:02d}")
+            [print(f"Runtime for lap {i}: "
+                   f"{runtime['h']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:02d}\n")
              for i, runtime in enumerate(self.laps_time)]
         elif self.__verbose == 0:
-            [print(f"{runtime['h']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:02d}")
+            [print(f"{runtime['h']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:02d}\n")
              for runtime in self.laps_time]
         else:
             error_message = f"Unsupported verbose level ({self.__verbose}) for Timer"
