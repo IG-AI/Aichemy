@@ -49,7 +49,7 @@ class Timer(object):
         else:
             return None
 
-    def get_all_runtimes(self):
+    def get_laps_runtime(self):
         if self.__verbose >= 1:
             [print(f"Runtime for lap {i}: {runtime['h']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:02d}")
              for i, runtime in enumerate(self.laps_time)]
