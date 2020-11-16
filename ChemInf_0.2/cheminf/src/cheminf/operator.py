@@ -4,16 +4,16 @@ from ..cheminf.controller import ChemInfController
 
 class ChemInfTimer(Timer):
     def __init__(self):
-        super(ChemInfTimer, self).__init__("ChemInf")
+        super(ChemInfTimer, self).__init__("ChemInf", verbose=1)
         self.start()
 
 
 class ChemInfOperator(object):
     def __init__(self):
+        self.timer = ChemInfTimer()
         self.controller = ChemInfController()
         self.mode = self.controller.args.mode
         self.classifier = self.controller.args.classifier
-        self.timer = ChemInfTimer()
 
         if self.mode == 'postproc':
             from ..cheminf.postprocessing import PostProcNormal

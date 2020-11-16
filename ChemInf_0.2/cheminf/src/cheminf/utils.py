@@ -9,17 +9,17 @@ from functools import wraps
 
 
 class Timer(object):
-    def __init__(self, tag):
-        if tag[0].isupper():
-            runtime_tag = "Runtime"
-        else:
-            runtime_tag = "runtime"
-        self.__prefix = f"\n{tag} {runtime_tag}\n-----------------------------------\n"
+    def __init__(self, tag, verbose=0):
+        self.running = False
+        self.started = False
+        self.__prefix = f"\n{tag} Timer\n-----------------------------------\n"
         self.__start_time = None
+        self.__pause_time = None
+        self.__verbose = verbose
 
     def __repr__(self):
         runtime = self.__get_runtime()
-        if runtime:
+        if self.running:
             f"{runtime['hours']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:d}"
         else:
             return "0:00:00.0"
@@ -29,7 +29,7 @@ class Timer(object):
                f"{self.__repr__()}"
 
     def __get_runtime(self):
-        if self.__start_time:
+        if self.running:
             current_time = np.round(time.time() - self.__start_time, decimals=2)
             runtime_sec, runtime_centisec = divmod(current_time, 1)
             runtime_min, runtime_sec = divmod(runtime_sec, 60)
@@ -39,16 +39,62 @@ class Timer(object):
             return None
 
     def start(self):
-        self.__start_time = time.time()
+        if not self.started:
+            self.started = True
+            self.running = True
+            self.__start_time = time.time()
+        else:
+            if self.__verbose >= 2:
+                print("Timer has already been started")
+
+    def pause(self):
+        if self.running:
+            self.running = False
+            self.__pause_time = time.time()
+        else:
+            if self.__verbose >= 2:
+                print("The timer is already paused")
+
+    def resume(self):
+        if not self.running:
+            self.running = True
+            paused_time = time.time() - self.__pause_time
+            self.__start_time = self.__start_time + paused_time
+        else:
+            if self.__verbose >= 2:
+                print("The timer is already running")
 
     def lap(self):
-        return f"{self.__prefix}The current runtime is {self.__repr__()}"
+        if self.__verbose >= 0:
+            runtime_string = f"{self.__repr__()}"
+        else:
+            raise ValueError("Unsupported verbose for Timer")
+
+        if self.__verbose >= 1:
+            runtime_string = f"{self.__prefix}The current runtime is " + runtime_string
+
+        return runtime_string
 
     def stop(self):
-        return f"{self.__prefix}The runtime was {self.__repr__()}"
+        if self.__verbose >= 0:
+            runtime_string = f"{self.__repr__()}"
+        else:
+            raise ValueError("Unsupported verbose for Timer")
+
+        if self.__verbose == 1:
+            runtime_string = f"{self.__prefix}The runtime was " + runtime_string
+        elif self.__verbose >= 2:
+            runtime_string = f"{self.__prefix}The timer has stopped\nThe runtime was " + runtime_string
+
+        return runtime_string
 
     def reset(self):
-        self.__start_time = time.time()
+        self.started = False
+        self.running = False
+        self.__start_time = None
+
+        if self.__verbose >= 2:
+            print("The timer has reset")
 
 
 # USAGE EXAMPLE:
