@@ -1,11 +1,11 @@
 #!/bin/bash
 
 #SBATCH --job-name=cheminf_auto
-#SBATCH --time=24:00:00
+#SBATCH --time=12:00:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=4
 #SBATCH --mem=100G
 
 #SBATCH -o /home/x_danag/slurm_output/cheminf_auto.%j.%a.out
@@ -28,6 +28,7 @@ echo -e "-----------------------------------------------------------------------
 echo    "STARTING JOB NUMBER "$SLURM_ARRAY_TASK_ID" WITH NAME "$name
 echo -e "\n--------------------------------------------------------------------------\n"
 
+srun -N1 --ntasks=1 --cpus-per-task=4 --mem=100G --time=12:00:00 --exclusive \
 singularity exec /proj/carlssonlab/singularity/frontline.simg \
 python cheminf/ auto -cl nn -i $INFILE -n $name -cf $config_override
 

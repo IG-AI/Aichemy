@@ -1,3 +1,8 @@
+inv_auto_plus_resample1_ratio_02	auto_plus_resample:True,resample_ratio:0.2
+inv_auto_plus_resample2_ratio_02	auto_plus_resample:True,resample_ratio:0.2
+inv_auto_plus_resample3_ratio_02	auto_plus_resample:True,resample_ratio:0.2
+inv_auto_plus_resample4_ratio_02	auto_plus_resample:True,resample_ratio:0.2
+inv_auto_plus_resample5_ratio_02	auto_plus_resample:True,resample_ratio:0.2
 inv_auto_plus_resample1_ratio_01	auto_plus_resample:True
 inv_auto_plus_resample2_ratio_01	auto_plus_resample:True
 inv_auto_plus_resample3_ratio_01	auto_plus_resample:True

@@ -5,6 +5,8 @@ __date__ = '2020-11-13'
 __email__ = 'andreas.luttens@gmail.com'
 __version__ = '0.1'
 
+import os
+
 """
 Plot ConfPred statistics 
 
@@ -70,7 +72,8 @@ def cal_plot(x_arr, y_arr, prefix, factor, settings):
     pt.xlim((0, 1))
     # add legend
     handles, labels = ax.get_legend_handles_labels()
-    lgd = ax.legend(handles, labels, loc='lower center', frameon=True,
+    filenames = [os.path.split(label)[1] for label in labels]
+    lgd = ax.legend(handles, filenames, loc='lower center', frameon=True,
                     ncol=1, bbox_to_anchor=(0.5, -0.4), fontsize=12)
 
     pt.savefig("%s.%s.png" % (prefix, factor), dpi=300, bbox_inches="tight")
@@ -82,7 +85,7 @@ def calibration_plots(library, header, prefix):
     error levels.
     """
 
-    settings = library.keys()
+    settings = list(library.keys())
     x = np.copy(library[settings[0]][:, 0])
 
     for i in range(9, len(header)):
@@ -95,10 +98,10 @@ def calibration_plots(library, header, prefix):
             x_masked = np.ma.array(x, mask=y_masked.mask)
             y_arr.append(y_masked)
 
-    x_arr = np.asarray([x_masked for _ in settings])
-    y_arr = np.asarray(y_arr)
+        x_arr = np.asarray([x_masked for _ in settings])
+        y_arr = np.asarray(y_arr)
 
-    cal_plot(x_arr, y_arr, prefix, factor, settings)
+        cal_plot(x_arr, y_arr, prefix, factor, settings)
 
 
 def main():
@@ -122,6 +125,7 @@ def main():
 
     # create scatter plots
     calibration_plots(library, header, args.outputname)
+
 
 if __name__ == "__main__":
     main()

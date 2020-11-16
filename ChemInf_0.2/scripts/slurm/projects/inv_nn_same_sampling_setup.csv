@@ -1,5 +1,5 @@
 inv_early_stop_patience_5	early_stop_patience:5,auto_plus_balancing:False
 inv_early_stop_threshold_0_1	early_stop_threshold:0.1,auto_plus_balancing:False
 inv_dropout_0_1	dropout:0.1,auto_plus_balancing:False
-inv_dim_hidden_extra_1000	dim_hidden:1000|4000|2000|1000,auto_plus_balancing:False
 inv_max_epochs_100	max_epochs:100,auto_plus_balancing:False
+inv_dim_hidden_extra_1000	dim_hidden:1000|4000|2000|1000,auto_plus_balancing:False
