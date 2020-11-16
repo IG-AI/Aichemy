@@ -30,7 +30,7 @@ class Timer(object):
             return self.__repr__()
         else:
             return f"{self.__prefix}" \
-                   f"{self.__repr__()}"
+                   f"Runtime: {self.__repr__()}"
 
     def runtime(self):
         if self.running:
@@ -79,7 +79,7 @@ class Timer(object):
             raise ValueError("Unsupported verbose level for Timer")
 
         if self.__verbose >= 1:
-            runtime_string = f"{self.__prefix}The current runtime is " + runtime_string
+            runtime_string = f"{self.__prefix}The current runtime is: " + runtime_string
 
         return runtime_string
 
@@ -93,7 +93,7 @@ class Timer(object):
         if self.__verbose == 1:
             runtime_string = f"{self.__prefix}The runtime was " + runtime_string
         elif self.__verbose >= 2:
-            runtime_string = f"{self.__prefix}The timer has stopped\nThe runtime was " + runtime_string
+            runtime_string = f"{self.__prefix}The timer has stopped\nThe runtime was: " + runtime_string
 
         print(runtime_string)
         return runtime_string
