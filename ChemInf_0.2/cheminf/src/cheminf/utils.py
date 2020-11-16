@@ -13,7 +13,8 @@ class Timer(object):
         self.running = False
         self.started = False
         self.timed_func = func
-        self.nr_labs = 0
+        self.nr_laps = 0
+        self.laps_time = []
         self.__prefix = f"\n{func} timer\n-------------------------------------\n"
         self.__start_time = None
         self.__pause_time = None
@@ -47,6 +48,17 @@ class Timer(object):
             return {'h': runtime_h, 'min': runtime_min, 'sec': runtime_sec, 'centisec': runtime_centisec}
         else:
             return None
+
+    def get_all_runtimes(self):
+        if self.__verbose >= 1:
+            [print(f"Runtime for lap {i}: {runtime['h']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:02d}")
+             for i, runtime in enumerate(self.laps_time)]
+        elif self.__verbose == 0:
+            [print(f"{runtime['h']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:02d}")
+             for runtime in self.laps_time]
+        else:
+            error_message = f"Unsupported verbose level ({self.__verbose}) for Timer"
+            raise ValueError(error_message)
 
     def start(self):
         if not self.started:
@@ -82,13 +94,15 @@ class Timer(object):
 
     def lap(self):
         if self.__verbose >= 0:
-            self.nr_labs += 1
+            self.laps_time.append(self.get_runtime())
+            self.nr_laps += 1
             runtime_string = f"{self.__repr__()}"
         else:
-            raise ValueError("Unsupported verbose level for Timer")
+            error_message = f"Unsupported verbose level ({self.__verbose}) for Timer"
+            raise ValueError(error_message)
 
         if self.__verbose >= 2:
-            operator_string = f"The timer is running on lap number {self.nr_labs}\n"
+            operator_string = f"The timer is running on lap number {self.nr_laps}\n"
         else:
             operator_string = ""
 
@@ -101,9 +115,11 @@ class Timer(object):
 
     def stop(self):
         if self.__verbose >= 0:
+            self.laps_time.append(self.get_runtime())
             runtime_string = f"{self.__repr__()}"
         else:
-            raise ValueError("Unsupported verbose level for Timer")
+            error_message = f"Unsupported verbose level ({self.__verbose}) for Timer"
+            raise ValueError(error_message)
 
         if self.__verbose >= 2:
             operator_string = f"The timer has stopped\n"
@@ -121,6 +137,8 @@ class Timer(object):
     def reset(self):
         self.started = False
         self.running = False
+        self.nr_laps = 0
+        self.laps_time = []
         self.__start_time = None
 
         if self.__verbose >= 1:
