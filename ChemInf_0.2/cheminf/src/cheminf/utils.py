@@ -26,7 +26,7 @@ class Timer(object):
 
     def __str__(self):
         return f"{self.__prefix}" \
-                   f"{self.__repr__()}"
+               f"{self.__repr__()}"
 
     def __get_runtime(self):
         if self.__start_time:
