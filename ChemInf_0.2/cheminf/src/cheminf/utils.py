@@ -9,8 +9,6 @@ from functools import wraps
 
 
 class Timer(object):
-    __operator_methods = ["start", "pause", "resume", "lap", "stop", "reset"]
-
     def __init__(self, func, verbose=0):
         self.running = False
         self.started = False
