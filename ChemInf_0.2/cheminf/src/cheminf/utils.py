@@ -25,8 +25,11 @@ class Timer(object):
             return "0:00:00.0"
 
     def __str__(self):
-        return f"{self.__prefix}" \
-               f"{self.__repr__()}"
+        if self.__verbose == 0:
+            return self.__repr__()
+        else:
+            return f"{self.__prefix}" \
+                   f"{self.__repr__()}"
 
     def __get_runtime(self):
         if self.running:
