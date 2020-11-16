@@ -1,9 +1,11 @@
-import time
-
-import numpy as np
-
-from ..cheminf.utils import UnsupportedClassifier, ModeError
+from ..cheminf.utils import UnsupportedClassifierError, ModeError, Timer
 from ..cheminf.controller import ChemInfController
+
+
+class ChemInfTimer(Timer):
+    def __init__(self):
+        super(ChemInfTimer, self).__init__("ChemInf")
+        self.start()
 
 
 class ChemInfOperator(object):
@@ -11,7 +13,7 @@ class ChemInfOperator(object):
         self.controller = ChemInfController()
         self.mode = self.controller.args.mode
         self.classifier = self.controller.args.classifier
-        self.__start_time = time.time()
+        self.timer = ChemInfTimer()
 
         if self.mode == 'postproc':
             from ..cheminf.postprocessing import PostProcNormal
@@ -46,17 +48,13 @@ class ChemInfOperator(object):
                     self.rndfor_model = None
 
                 else:
-                    raise UnsupportedClassifier(self.controller.args.classifier)
+                    raise UnsupportedClassifierError(self.controller.args.classifier)
 
     def __del__(self):
         try:
-            print(f"\nChemInf Runtime\n-----------------------------------\nRuntime for was {self.run_time()}s")
+            self.timer.stop()
         except AttributeError:
             pass
-
-    def run_time(self):
-        current_time = time.time()
-        return np.round(current_time - self.__start_time, decimals=2)
 
     @staticmethod
     def init_model(controller):
@@ -75,7 +73,7 @@ class ChemInfOperator(object):
             model = ModelNN(controller)
 
         else:
-            raise UnsupportedClassifier(controller.args.classifier)
+            raise UnsupportedClassifierError(controller.args.classifier)
 
         return model
 

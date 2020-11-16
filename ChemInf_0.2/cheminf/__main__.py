@@ -1,8 +1,8 @@
 __version__ = 0.2
-__authors__ = "Daniel Ågtrand, Leonard Sparring"
+__author__ = "Daniel Ågtrand, Leonard Sparring"
 __email__ = "d.e.agstrand@gmail.com, leo.sparring@gmail.com"
 __url__ = "https://github.com/leosparring/ChemInf/tree/master/ChemInf_0.2"
-__platform__ = 'Unix'
+__platform__ = 'Linux'
 __date__ = "30/10-2020"
 __contributors__ = "This frameworks random forest classifier is based on the cheminf_loop2_20.py aggregated mondrian " \
                    "conformal predictor written by Ulf Norinder. The neural network classifier is based on " \
@@ -18,8 +18,9 @@ __contributors__ = "This frameworks random forest classifier is based on the che
     Implementation of k-fold cross validation.
 28/09-2020 - 30/10-2020, DA: 
     Completely revamped the code with a object originated approached, extended the available classifiers with a 
-    dynamic neural network, added data utils, completely changed to how the user interact with the framework to make it
-    more user-friendly and added a setup script for easier installation of the framework.    
+    dynamic neural network, added data utils, completely changed to how the user interact with the program to make it
+    more user-friendly and added a setup script, a conda env file and pip env requirements file for easier installation 
+    of the program with more options for the user.    
 """
 from src.cheminf.operator import run_operator
 

@@ -9,29 +9,77 @@ from functools import wraps
 
 
 class Timer(object):
+    def __init__(self, tag):
+        if tag[0].isupper():
+            runtime_tag = "Runtime"
+        else:
+            runtime_tag = "runtime"
+        self.__prefix = f"\n{tag} {runtime_tag}\n-----------------------------------\n"
+        self.__start_time = None
+
+    def __repr__(self):
+        runtime = self.__get_runtime()
+        if runtime:
+            f"{runtime['hours']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:d}"
+        else:
+            return "0:00:00.0"
+
+    def __str__(self):
+        return f"{self.__prefix}" \
+                   f"{self.__repr__()}"
+
+    def __get_runtime(self):
+        if self.__start_time:
+            current_time = np.round(time.time() - self.__start_time, decimals=2)
+            runtime_sec, runtime_centisec = divmod(current_time, 1)
+            runtime_min, runtime_sec = divmod(runtime_sec, 60)
+            runtime_h, runtime_min = divmod(runtime_min, 60)
+            return {'h': runtime_h, 'min': runtime_min, 'sec': runtime_sec, 'centisec': runtime_centisec}
+        else:
+            return None
+
+    def start(self):
+        self.__start_time = time.time()
+
+    def lap(self):
+        return f"{self.__prefix}The current runtime is {self.__repr__()}"
+
+    def stop(self):
+        return f"{self.__prefix}The runtime was {self.__repr__()}"
+
+    def reset(self):
+        self.__start_time = time.time()
+
+
+# USAGE EXAMPLE:
+# @TimerWrapper
+# function(input)
+class WrapperTimer(Timer):
     def __init__(self, func):
+        super(WrapperTimer, self).__init__(func)
         self.func = func
 
     def __call__(self, *args):
-        begin = time.time()
-
+        self.start()
         self.func(*args)
-
-        end = time.time()
-        run_time = np.round(end - begin, decimals=2)
-        print("\nTIME PROFILE\n-----------------------------------")
-        print(f"Runtime for {self.func.__name__} was {run_time}s")
+        self.end()
 
 
-def mutually_exclusive(keyword, *keywords):
-    keywords = (keyword,)+keywords
+# USAGE EXAMPLE:
+# @mutually_exclusive_wrapper(do, second_do, third_do)
+# function(input, output, do, second_do, third_do)
+def mutually_exclusive_wrapper(exclusive, *exclusives):
+    exclusives = (exclusive,) + exclusives
+
     def wrapper(func):
         @wraps(func)
         def inner(*args, **kwargs):
-            if sum(k in keywords for k in kwargs) != 1:
-                raise TypeError('You must specify exactly one of {}'.format(', '.join(keywords)))
+            if sum(arg in exclusives for arg in kwargs) != 1:
+                raise TypeError('You must specify exactly one of {}'.format(', '.join(exclusives)))
             return func(*args, **kwargs)
+
         return inner
+
     return wrapper
 
 
@@ -192,19 +240,19 @@ class ModeError(Exception):
         super(Exception, self).__init__(message)
 
 
-class UnsupportedClassifier(Exception):
+class UnsupportedClassifierError(Exception):
     def __init__(self, classifier):
         message = f"Unsupported classifier: {classifier}"
         super(Exception, self).__init__(message)
 
 
-class NoMultiCoreSupport(Exception):
+class NoMultiCoreSupportError(Exception):
     def __init__(self, mode):
         message = f"{mode.capitalize()} doesn't have multicore support"
         super(Exception, self).__init__(message)
 
 
-class MutuallyExclusive(Exception):
+class MutuallyExclusiveError(Exception):
     def __init__(self, arg1, arg2):
         message = f"You must specify exactly one of {arg1} and {arg2}"
         super(Exception, self).__init__(message)

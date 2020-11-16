@@ -49,9 +49,7 @@ class ClassifierRF(RandomForestClassifier):
     """Inherits from RandomForestClassifier"""
     def __init__(self, smooth=True):
         super(ClassifierRF, self).__init__()
-        # noinspection PyGlobalUndefined
         global bisect_right
-        # noinspection PyGlobalUndefined
         global bisect_left
         _temp = __import__('bisect', globals(), locals(), ['bisect_right', 'bisect_left'])
         bisect_right = _temp.bisect_right
@@ -96,7 +94,7 @@ class ClassifierRF(RandomForestClassifier):
         index_p_c = bisect_left(calibration_alphas_c, nonconf_score_c)
         n_equal_or_over = size_cal_list - index_p_c
         # The relative position is outputted as the conformal
-        #  prediction's p value.
+        # prediction's p value.
         if not self.smooth:
             p_c = float(n_equal_or_over) / float(size_cal_list + 1)
         else:
@@ -113,7 +111,6 @@ class ClassifierRF(RandomForestClassifier):
 class ClassifierNN(NNModule, ABC):
     def __init__(self, dim_in: int, dim_hidden: list, dim_out: int, dropout: float):
         super(ClassifierNN, self).__init__()
-        # noinspection PyGlobalUndefined
         global nn
         _temp = __import__('torch', globals(), locals(), ['nn'])
         nn = _temp.nn

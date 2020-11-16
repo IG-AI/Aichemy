@@ -7,8 +7,8 @@ from sklearn.utils import resample
 from random import randrange
 from abc import ABCMeta, abstractmethod
 
-from ..cheminf.utils import read_dataframe, save_dataframe, shuffle_dataframe, MutuallyExclusive, \
-    ModeError, NoMultiCoreSupport
+from ..cheminf.utils import read_dataframe, save_dataframe, shuffle_dataframe, MutuallyExclusiveError, \
+    ModeError, NoMultiCoreSupportError
 
 MULTICORE_SUPPORT = ['balancing', 'resample']
 
@@ -91,7 +91,7 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
                 dataframe = shuffle_dataframe(dataframe)
                 save_dataframe(dataframe, self.outfile)
         else:
-            raise NoMultiCoreSupport(submode)
+            raise NoMultiCoreSupportError(submode)
 
     def balancing(self, dataframes=None):
         return self._sample('balancing', dataframes)
@@ -186,7 +186,7 @@ class PreProcNormal(ChemInfPreProc):
             if self.submode in MULTICORE_SUPPORT:
                 self._multicore(self.submode)
             else:
-                raise NoMultiCoreSupport(self.submode)
+                raise NoMultiCoreSupportError(self.submode)
         else:
             self._single_core(self.submode)
 
@@ -287,7 +287,7 @@ def resample_dataframe(dataframe, percentage=1):
 
 def split_dataframe(dataframe, percentage=None, index=None, axis=0):
     if (percentage and index) or (percentage is None and index is None):
-        raise MutuallyExclusive('percentage', 'index')
+        raise MutuallyExclusiveError('percentage', 'index')
     if percentage:
         index = int(np.round(len(dataframe) * percentage))
 
@@ -305,7 +305,7 @@ def split_dataframe(dataframe, percentage=None, index=None, axis=0):
 
 def trim_dataframe(dataframe, percentage=None, index=None, axis=0):
     if (percentage and index) or (percentage is None and index is None):
-        raise MutuallyExclusive('percentage', 'index')
+        raise MutuallyExclusiveError('percentage', 'index')
     if percentage:
         index = int(np.round(len(dataframe) * percentage))
 
