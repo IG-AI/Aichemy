@@ -9,20 +9,23 @@ from functools import wraps
 
 
 class Timer(object):
-    def __init__(self, tag, verbose=0):
+    __operator_methods = ["start", "pause", "resume", "lap", "stop", "reset"]
+
+    def __init__(self, func, verbose=0):
         self.running = False
         self.started = False
-        self.__prefix = f"\n{tag} Timer\n-----------------------------------\n"
+        self.timed_func = func
+        self.__prefix = f"\n{func} Timer\n-----------------------------------\n"
         self.__start_time = None
         self.__pause_time = None
         self.__verbose = verbose
 
     def __repr__(self):
-        runtime = self.__get_runtime()
+        runtime = self.runtime()
         if self.running:
-            f"{runtime['hours']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:d}"
+            return f"{runtime['h']:d}:{runtime['min']:02d}:{runtime['sec']:02d}.{runtime['centisec']:02d}"
         else:
-            return "0:00:00.0"
+            return "0:00:00.00"
 
     def __str__(self):
         if self.__verbose == 0:
@@ -31,10 +34,12 @@ class Timer(object):
             return f"{self.__prefix}" \
                    f"{self.__repr__()}"
 
-    def __get_runtime(self):
+    def runtime(self):
         if self.running:
             current_time = np.round(time.time() - self.__start_time, decimals=2)
             runtime_sec, runtime_centisec = divmod(current_time, 1)
+            runtime_centisec = int(np.round(runtime_centisec * 100, decimals=0))
+            runtime_sec = int(runtime_sec)
             runtime_min, runtime_sec = divmod(runtime_sec, 60)
             runtime_h, runtime_min = divmod(runtime_min, 60)
             return {'h': runtime_h, 'min': runtime_min, 'sec': runtime_sec, 'centisec': runtime_centisec}
@@ -46,6 +51,8 @@ class Timer(object):
             self.started = True
             self.running = True
             self.__start_time = time.time()
+            if self.__verbose >= 2:
+                print("Starting timer for")
         else:
             if self.__verbose >= 2:
                 print("Timer has already started")
@@ -81,6 +88,7 @@ class Timer(object):
     def stop(self):
         if self.__verbose >= 0:
             runtime_string = f"{self.__repr__()}"
+            print(runtime_string)
         else:
             raise ValueError("Unsupported verbose level for Timer")
 
@@ -89,6 +97,7 @@ class Timer(object):
         elif self.__verbose >= 2:
             runtime_string = f"{self.__prefix}The timer has stopped\nThe runtime was " + runtime_string
 
+        print(runtime_string)
         return runtime_string
 
     def reset(self):
@@ -103,9 +112,9 @@ class Timer(object):
 # USAGE EXAMPLE:
 # @TimerWrapper
 # function(input)
-class WrapperTimer(Timer):
+class TimerWrapper(Timer):
     def __init__(self, func):
-        super(WrapperTimer, self).__init__(func)
+        super(TimerWrapper, self).__init__(func, verbose=1)
         self.func = func
 
     def __call__(self, *args):
@@ -305,3 +314,31 @@ class MutuallyExclusiveError(Exception):
     def __init__(self, arg1, arg2):
         message = f"You must specify exactly one of {arg1} and {arg2}"
         super(Exception, self).__init__(message)
+
+
+# Cool self.get() method idea:
+"""
+    def get(self, item, item_args=None):
+        if hasattr(self, item):
+            attribute = getattr(self, item)
+            if callable(attribute) and attribute not in self.__operator_methods:
+                if item_args is None:
+                    attribute = eval(f"self.{attribute}()")
+                else:
+                    args_string = ""
+                    if item_args:
+                        for arg in item_args:
+                            args_string = args_string + arg + ", "
+                        args_string = args_string.rsplit(', ', 1)[0]
+                        attribute = eval(f"self.{attribute}({args_string})")
+
+            elif attribute in self.__operator_methods:
+                error_massage = f"Operator methods ({self.__operator_methods}) can't be called with Timer.get()"
+                raise ValueError(error_massage)
+
+            return attribute
+
+        else:
+            error_massage = f"Timer doesn't have attribute {item}"
+            raise ValueError(error_massage)
+"""
