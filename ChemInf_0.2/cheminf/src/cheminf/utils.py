@@ -48,7 +48,7 @@ class Timer(object):
             self.__start_time = time.time()
         else:
             if self.__verbose >= 2:
-                print("Timer has already been started")
+                print("Timer has already started")
 
     def pause(self):
         if self.running:
@@ -71,7 +71,7 @@ class Timer(object):
         if self.__verbose >= 0:
             runtime_string = f"{self.__repr__()}"
         else:
-            raise ValueError("Unsupported verbose for Timer")
+            raise ValueError("Unsupported verbose level for Timer")
 
         if self.__verbose >= 1:
             runtime_string = f"{self.__prefix}The current runtime is " + runtime_string
@@ -82,7 +82,7 @@ class Timer(object):
         if self.__verbose >= 0:
             runtime_string = f"{self.__repr__()}"
         else:
-            raise ValueError("Unsupported verbose for Timer")
+            raise ValueError("Unsupported verbose level for Timer")
 
         if self.__verbose == 1:
             runtime_string = f"{self.__prefix}The runtime was " + runtime_string
