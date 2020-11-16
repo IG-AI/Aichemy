@@ -62,7 +62,7 @@ class WrapperTimer(Timer):
     def __call__(self, *args):
         self.start()
         self.func(*args)
-        self.end()
+        self.stop()
 
 
 # USAGE EXAMPLE:
