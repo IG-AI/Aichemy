@@ -27,9 +27,9 @@ while status and nmatches > 0:
             nmatches -= 1 # if all matches are found, you can also stop
         else:
             line = line.replace(name, "%s\t0"%name, 1)
-            fout.write(line)
+        fout.write(line)
     else:
-        status = True
+        status = False
 
 fin.close()
 fout.close()
