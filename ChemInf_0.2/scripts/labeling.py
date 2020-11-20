@@ -26,11 +26,10 @@ while status and nmatches > 0:
             keep.remove(name) # deswelling set strategy
             nmatches -= 1 # if all matches are found, you can also stop
         else:
-	    line = line.replace(name, "%s\t0"%name, 1)
-        fout.write(line)
+            line = line.replace(name, "%s\t0"%name, 1)
+            fout.write(line)
     else:
         status = True
 
 fin.close()
 fout.close()
-       
