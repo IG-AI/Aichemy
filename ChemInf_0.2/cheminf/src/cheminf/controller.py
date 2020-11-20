@@ -206,7 +206,11 @@ class ChemInfConfig(object):
     def update_config(self, overrider):
         new_configs = overrider.split(',')
         for config in new_configs:
-            key, value = config.split(':')
+            try:
+                key, value = config.split(':')
+            except ValueError:
+                return
+
             try:
                 attr_pos = 'classifier'
                 old_value = getattr(self.classifier, key)
@@ -253,6 +257,9 @@ class ConfigClf(object):
             self.max_epochs = int(config['neural_network']['max_epochs'])
             self.early_stop_patience = int(config['neural_network']['early_stop_patience'])
             self.early_stop_threshold = float(config['neural_network']['early_stop_threshold'])
+            self.optimizer = config['neural_network']['optimizer']
+            self.optimizer_learn_rate = float(config['neural_network']['optimizer_learn_rate'])
+            self.optimizer_weight_decay = float(config['neural_network']['optimizer_weight_decay'])
 
             try:
                 self.pred_sig = int(config['neural_network']['pred_sig'])

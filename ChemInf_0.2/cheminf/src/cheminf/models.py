@@ -385,12 +385,13 @@ class ModelNN(ChemInfModel):
         super(ModelNN, self).__init__(database, 'nn')
 
     def build(self, models=None):
-        import torch
         from skorch import NeuralNetClassifier
         from skorch.callbacks import EarlyStopping, EpochScoring
         from skorch.dataset import Dataset
         from skorch.helper import predefined_split
         from torch import nn
+        from torch import FloatTensor
+        from torch import optim
 
         from libs.nonconformist.base import ClassifierAdapter
         from libs.nonconformist.icp import IcpClassifier
@@ -404,8 +405,12 @@ class ModelNN(ChemInfModel):
         cal_ratio = self.config.cal_ratio
         batch_size = self.config.batch_size
         max_epochs = self.config.max_epochs
+        optimizer_learn_rate = self.config.optimizer_learn_rate
+        optimizer_weight_decay = self.config.optimizer_weight_decay
         early_stop_patience = self.config.early_stop_patience
         early_stop_threshold = self.config.early_stop_threshold
+
+        optimizer = eval(f"optim.{self.config.optimizer}")
 
         X = np.array(train_dataframe.iloc[:, 2:]).astype(np.float32)
         y = np.array(train_dataframe['class']).astype(np.int64)
@@ -433,7 +438,7 @@ class ModelNN(ChemInfModel):
             nr_class1 = len([x for x in y[proper_train_set] if x == 1])
 
             # Setup for class weights
-            class_weights = 1 / torch.FloatTensor([nr_class0, nr_class1])
+            class_weights = 1 / FloatTensor([nr_class0, nr_class1])
 
             # Define the skorch classifier
             minus_ba = EpochScoring(minus_bacc,
@@ -449,9 +454,9 @@ class ModelNN(ChemInfModel):
 
             model = NeuralNetClassifier(classifier, batch_size=batch_size, max_epochs=max_epochs,
                                         train_split=predefined_split(valid_dataset),  # Use predefined validation set
-                                        optimizer=RangerLars,
-                                        optimizer__lr=0.001,
-                                        optimizer__weight_decay=0.1,
+                                        optimizer=optimizer,
+                                        optimizer__lr=optimizer_learn_rate,
+                                        optimizer__weight_decay=optimizer_weight_decay,
                                         criterion=nn.CrossEntropyLoss,
                                         criterion__weight=class_weights,
                                         callbacks=[minus_ba, early_stop])
