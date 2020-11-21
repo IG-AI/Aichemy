@@ -382,7 +382,18 @@ class ModelRNDFOR(ChemInfModel):
 
 class ModelNN(ChemInfModel):
     def __init__(self, database):
+        _temp = __import__('torch', globals(), locals(), ['optim'])
+        self.torch_optim = _temp.optim
+        self.available_optimizers = self._add_optimizer_list()
         super(ModelNN, self).__init__(database, 'nn')
+
+    def _add_optimizer_list(self):
+        from ..cheminf.controller import OPTIMIZERS
+        optimizer_call_dict = {}
+        for optimizer in OPTIMIZERS:
+            optimizer_call_dict[optimizer] = eval(f"self.torch_optim.{optimizer}")
+        print(optimizer_call_dict)
+        return optimizer_call_dict
 
     def build(self, models=None):
         from skorch import NeuralNetClassifier
@@ -391,7 +402,6 @@ class ModelNN(ChemInfModel):
         from skorch.helper import predefined_split
         from torch import nn
         from torch import FloatTensor
-        from torch import optim
 
         from libs.nonconformist.base import ClassifierAdapter
         from libs.nonconformist.icp import IcpClassifier
@@ -410,7 +420,12 @@ class ModelNN(ChemInfModel):
         early_stop_patience = self.config.early_stop_patience
         early_stop_threshold = self.config.early_stop_threshold
 
-        optimizer = eval(f"optim.{self.config.optimizer}")
+        print(self.available_optimizers)
+        if self.config.optimizer in self.available_optimizers:
+            optimizer = self.available_optimizers[self.config.optimizer]
+        else:
+            error_message = f"Unsupported optimizer: {self.config.optimizer}"
+            raise ValueError(error_message)
 
         X = np.array(train_dataframe.iloc[:, 2:]).astype(np.float32)
         y = np.array(train_dataframe['class']).astype(np.int64)

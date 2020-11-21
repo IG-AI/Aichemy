@@ -17,6 +17,8 @@ OCCASIONAL_FLAGS = ['outfile', 'outfile2', 'classifier', 'models_dir', 'percenta
 
 ALL_FLAGS = ['infile', 'name', 'override_config'] + OCCASIONAL_FLAGS
 
+OPTIMIZERS = ['Adam', 'AdamW', 'Adamax', 'RMSprop', 'SGD', 'Adagrad', 'Adadelta']
+
 
 class ChemInfInput(object):
     def __init__(self, config_file):
@@ -199,6 +201,9 @@ class ChemInfConfig(object):
             self.classifier = ConfigClf(classifier_type, self.clf_conf_file)
         else:
             self.classifier = None
+
+        print(self.classifier.optimizer_weight_decay)
+        print(self.classifier.optimizer_learn_rate)
 
         if overrider is not None:
             self.update_config(overrider)
