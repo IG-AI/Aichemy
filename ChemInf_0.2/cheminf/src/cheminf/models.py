@@ -382,18 +382,21 @@ class ModelRNDFOR(ChemInfModel):
 
 class ModelNN(ChemInfModel):
     def __init__(self, database):
-        _temp = __import__('torch', globals(), locals(), ['optim'])
-        self.torch_optim = _temp.optim
-        self.available_optimizers = self._add_optimizer_list()
         super(ModelNN, self).__init__(database, 'nn')
+        self.optimizer = None
 
-    def _add_optimizer_list(self):
-        from ..cheminf.controller import OPTIMIZERS
-        optimizer_call_dict = {}
-        for optimizer in OPTIMIZERS:
-            optimizer_call_dict[optimizer] = eval(f"self.torch_optim.{optimizer}")
-        print(optimizer_call_dict)
-        return optimizer_call_dict
+    def _set_optimizer(self):
+        from ..cheminf.controller import PYTORCH_OPTIMIZERS, TORCHTOOLS_OPTIMIZERS
+
+        if self.config.optimizer in PYTORCH_OPTIMIZERS:
+            exec(f"from torch.optim import {self.config.optimizer }")
+            self.optimizer = eval(self.config.optimizer)
+        elif self.config.optimizer in TORCHTOOLS_OPTIMIZERS:
+            exec(f"from libs.torchtools.optim import {self.config.optimizer}")
+            self.optimizer = eval(self.config.optimizer)
+        else:
+            error_massage = f"Unsupported optimizer: {self.config.optimizer}"
+            ValueError(error_massage)
 
     def build(self, models=None):
         from skorch import NeuralNetClassifier
@@ -406,7 +409,6 @@ class ModelNN(ChemInfModel):
         from libs.nonconformist.base import ClassifierAdapter
         from libs.nonconformist.icp import IcpClassifier
         from libs.nonconformist.nc import ClassifierNc, MarginErrFunc
-        from libs.torchtools.optim import RangerLars
 
         train_dataframe = self._get_dataframe('train')
 
@@ -419,16 +421,12 @@ class ModelNN(ChemInfModel):
         optimizer_weight_decay = self.config.optimizer_weight_decay
         early_stop_patience = self.config.early_stop_patience
         early_stop_threshold = self.config.early_stop_threshold
-
-        print(self.available_optimizers)
-        if self.config.optimizer in self.available_optimizers:
-            optimizer = self.available_optimizers[self.config.optimizer]
-        else:
-            error_message = f"Unsupported optimizer: {self.config.optimizer}"
-            raise ValueError(error_message)
+        self._set_optimizer()
 
         X = np.array(train_dataframe.iloc[:, 2:]).astype(np.float32)
         y = np.array(train_dataframe['class']).astype(np.int64)
+
+        print(f"OPTIMIZER: {self.optimizer}")
 
         for i in range(nr_models):
             if models is None:
@@ -469,7 +467,7 @@ class ModelNN(ChemInfModel):
 
             model = NeuralNetClassifier(classifier, batch_size=batch_size, max_epochs=max_epochs,
                                         train_split=predefined_split(valid_dataset),  # Use predefined validation set
-                                        optimizer=optimizer,
+                                        optimizer=self.optimizer,
                                         optimizer__lr=optimizer_learn_rate,
                                         optimizer__weight_decay=optimizer_weight_decay,
                                         criterion=nn.CrossEntropyLoss,
