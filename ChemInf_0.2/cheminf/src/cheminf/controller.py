@@ -170,7 +170,7 @@ class ChemInfInput(object):
             subparser.add_argument('-ch', '--chunksize',
                                    default=None,
                                    type=int,
-                                   help="Specify size of chunks the files should be divided into.")
+                                   help="Specify the size of chunks the files should be divided into.")
 
         for subparser in [parser_preproc_balancing, parser_preproc_resample, parser_preproc_split, parser_preproc_trim]:
             subparser.add_argument('-nc', '--nr_core',
