@@ -390,13 +390,13 @@ class ModelNN(ChemInfModel):
 
         if self.config.optimizer in PYTORCH_OPTIMIZERS:
             exec(f"from torch.optim import {self.config.optimizer }")
-            self.optimizer = eval(self.config.optimizer)
         elif self.config.optimizer in TORCHTOOLS_OPTIMIZERS:
             exec(f"from libs.torchtools.optim import {self.config.optimizer}")
-            self.optimizer = eval(self.config.optimizer)
         else:
             error_massage = f"Unsupported optimizer: {self.config.optimizer}"
             ValueError(error_massage)
+
+        self.optimizer = eval(self.config.optimizer)
 
     def build(self, models=None):
         from skorch import NeuralNetClassifier
