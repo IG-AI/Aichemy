@@ -75,7 +75,7 @@ class ChemInfPref(object):
         parser_preproc_balancing = parser_preproc_mode.add_parser('balancing',
                                                                   help="Balancing a datasets and saves it")
 
-        parser_preproc_resample = parser_preproc_mode.add_parser('resample',
+        parser_preproc_sample = parser_preproc_mode.add_parser('sample',
                                                                  help="Balancing a datasets and saves it")
 
         parser_preproc_split = parser_preproc_mode.add_parser('split',
@@ -96,7 +96,7 @@ class ChemInfPref(object):
         parser_postproc_plot = parser_postproc_mode.add_parser('plot',
                                                                help="Choose a preprocessing submode to preform")
         all_parsers = [parser_auto, parser_build, parser_improve, parser_predict,
-                       parser_validate, parser_preproc_balancing, parser_preproc_resample, parser_preproc_split,
+                       parser_validate, parser_preproc_balancing, parser_preproc_sample, parser_preproc_split,
                        parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]
 
         for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate]:
@@ -122,7 +122,7 @@ class ChemInfPref(object):
                                    help="Name of the current project, to which all out_puts "
                                         "will use as prefixes or in subdirectories with that name.")
 
-        for subparser in [parser_predict, parser_validate, parser_preproc_balancing, parser_preproc_resample,
+        for subparser in [parser_predict, parser_validate, parser_preproc_balancing, parser_preproc_sample,
                           parser_preproc_split, parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]:
             subparser.add_argument('-o', '--outfile',
                                    default=None,
@@ -142,7 +142,7 @@ class ChemInfPref(object):
                                         "or 'predict'). Otherwise it will be the default model directory "
                                         "(data/models).")
 
-        for subparser in [parser_preproc_split, parser_preproc_trim, parser_preproc_balancing, parser_preproc_resample]:
+        for subparser in [parser_preproc_split, parser_preproc_trim, parser_preproc_balancing, parser_preproc_sample]:
             subparser.add_argument('-pc', '--percentage',
                                    type=float,
                                    default=0.5,
@@ -167,13 +167,13 @@ class ChemInfPref(object):
                                    default=None,
                                    help="Specify a parameter in the configuration that will to be override ")
 
-        for subparser in [parser_auto, parser_preproc_balancing, parser_preproc_resample]:
+        for subparser in [parser_auto, parser_preproc_balancing, parser_preproc_sample]:
             subparser.add_argument('-ch', '--chunksize',
                                    default=None,
                                    type=int,
                                    help="Specify the size of chunks the files should be divided into.")
 
-        for subparser in [parser_auto, parser_preproc_balancing, parser_preproc_resample, parser_preproc_split,
+        for subparser in [parser_auto, parser_preproc_balancing, parser_preproc_sample, parser_preproc_split,
                           parser_preproc_trim]:
             subparser.add_argument('-nc', '--nr_core',
                                    default=1,
@@ -183,7 +183,7 @@ class ChemInfPref(object):
         args = parser.parse_args()
 
         if hasattr(args, 'preproc_mode'):
-            if (args.preproc_mode == 'balancing' or args.preproc_mode == 'resample')\
+            if (args.preproc_mode == 'balancing' or args.preproc_mode == 'sample')\
                     and (args.nr_core and not args.chunksize):
                 parser.error("Multicore has to be executed with chunking in preproc mode.")
 
@@ -287,11 +287,11 @@ class ConfigExec(object):
         if operator_mode == 'auto':
             self.auto_save_preproc = boolean(config['auto']['auto_save_preproc'])
             self.auto_plus_balancing = boolean(config['auto']['auto_plus_balancing'])
-            self.auto_plus_resample = boolean(config['auto']['auto_plus_resample'])
+            self.auto_plus_sample = boolean(config['auto']['auto_plus_sample'])
             self.auto_plus_sum = boolean(config['auto']['auto_plus_sum'])
             self.auto_plus_plot = boolean(config['auto']['auto_plus_plot'])
             self.train_test_ratio = float(config['auto']['train_test_ratio'])
-            self.resample_ratio = float(config['auto']['resample_ratio'])
+            self.sample_ratio = float(config['auto']['sample_ratio'])
 
         if operator_mode == 'postproc' or operator_mode == 'auto':
             self.error_level = int(config['postproc']['error_level'])
@@ -343,16 +343,16 @@ class ChemInfController(ChemInfPref):
             infile = self.args.infiles[0]
             if not os.path.exists(infile):
                 if self.args.mode == 'postproc':
-                    _infile = f"{self.src_dir}/data/{self.args.name}/predictions/{infile}"
+                    infile = f"{self.src_dir}/data/{self.args.name}/predictions/{infile}"
                 else:
-                    _infile = f"{self.src_dir}/data/{infile}"
+                    infile = f"{self.src_dir}/data/{infile}"
 
-                if os.path.isfile(_infile):
-                    self.args.infile = _infile
-                else:
-                    raise FileNotFoundError(f"Couldn't find the input file, both absolut path and file name in the "
-                                            f"data directory in the ChemInf source directory ({self.src_dir}/data) has "
-                                            f"been explored")
+            if os.path.isfile(infile):
+                self.args.infile = infile
+            else:
+                raise FileNotFoundError(f"Couldn't find the input file, both absolut path and file name in the "
+                                        f"data directory in the ChemInf source directory ({self.src_dir}/data) has "
+                                        f"been explored")
 
         elif self.args.post_mode == 'plot':
             if all([not os.path.exists(infile) for infile in self.args.infiles]):
@@ -363,7 +363,6 @@ class ChemInfController(ChemInfPref):
                 for infile in self.args.infiles:
                     if not os.path.exists(infile):
                         none_existing.append(infile)
-
                 if len(none_existing) > 1:
                     plural_string = "s don't"
                 else:
@@ -400,8 +399,8 @@ class ChemInfController(ChemInfPref):
                     elif self.args.preproc_mode == 'balancing':
                         self.args.outfile = f"{self.src_dir}/data/{infile_name}_balanced{infile_extension}"
 
-                    elif self.args.preproc_mode == 'resample':
-                        self.args.outfile = f"{self.src_dir}/data/{infile_name}_resampled{infile_extension}"
+                    elif self.args.preproc_mode == 'sample':
+                        self.args.outfile = f"{self.src_dir}/data/{infile_name}_sampled{infile_extension}"
 
                     elif self.args.preproc_mode == 'split':
                         if self.args.outfile is None:

@@ -10,7 +10,7 @@ from abc import ABCMeta, abstractmethod
 from ..cheminf.utils import read_dataframe, save_dataframe, shuffle_dataframe, MutuallyExclusiveError, \
     ModeError, NoMultiCoreSupportError
 
-MULTICORE_SUPPORT = ['balancing', 'resample', 'auto']
+MULTICORE_SUPPORT = ['balancing', 'sample', 'auto']
 
 class ChemInfPreProc(object, metaclass=ABCMeta):
     def __init__(self, controller):
@@ -50,7 +50,7 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
             else:
                 return dataframe_large, dataframe_small
 
-        elif submode == 'trim' or submode == 'balancing' or submode == 'resample':
+        elif submode == 'trim' or submode == 'balancing' or submode == 'sample':
             utils = getattr(self, submode)
             dataframe = utils(dataframes)
         else:
@@ -101,11 +101,11 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
     def balancing(self, dataframes=None):
         return self._sample('balancing', dataframes)
 
-    def resample(self, dataframes=None):
-        return self._sample('resample', dataframes)
+    def sample(self, dataframes=None):
+        return self._sample('sample', dataframes)
 
     def _sample(self, submode, dataframes=None):
-        if submode == 'balancing' or submode == 'resample':
+        if submode == 'balancing' or submode == 'sample':
             if dataframes is None:
                 infile = self.infile
                 dataframes = read_dataframe(infile, chunksize=self.chunksize)
@@ -127,8 +127,8 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
                         try:
                             if submode == 'balancing':
                                 dataframe_chunk = balancing_dataframe(chunk, percentage=self.percentage)
-                            elif submode == 'resample':
-                                dataframe_chunk = resample_dataframe(chunk, percentage=self.percentage)
+                            elif submode == 'sample':
+                                dataframe_chunk = sample_dataframe(chunk, percentage=self.percentage)
 
                             dataframe_results = pd.concat([dataframe_results, dataframe_chunk])
 
@@ -139,8 +139,8 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
                 try:
                     if submode == 'balancing':
                         dataframe_results = balancing_dataframe(dataframes, percentage=self.percentage)
-                    elif submode == 'resample':
-                        dataframe_results = resample_dataframe(dataframes, percentage=self.percentage)
+                    elif submode == 'sample':
+                        dataframe_results = sample_dataframe(dataframes, percentage=self.percentage)
 
                 except KeyError:
                     pass
@@ -160,7 +160,7 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
         return self._cut('split', dataframe, index)
 
     def _cut(self, submode, dataframe=None, index=None):
-        if submode != 'balancing' and submode != 'resample':
+        if submode != 'balancing' and submode != 'sample':
             if dataframe is None:
                 dataframe = read_dataframe(self.infile, shuffle=self.shuffle)
 
@@ -200,19 +200,19 @@ class PreProcAuto(ChemInfPreProc):
     def __init__(self, controller):
         super(PreProcAuto, self).__init__(controller)
         self.train_test_ratio = controller.config.execute.train_test_ratio
-        self.resample_ratio = controller.config.execute.resample_ratio
+        self.sample_ratio = controller.config.execute.sample_ratio
         self.auto_save_preproc = controller.config.execute.auto_save_preproc
         self.auto_plus_balancing = (self.mode == 'auto' and controller.config.execute.auto_plus_balancing)
-        self.auto_plus_resample = (self.mode == 'auto' and controller.config.execute.auto_plus_resample)
+        self.auto_plus_sample = (self.mode == 'auto' and controller.config.execute.auto_plus_sample)
 
     def run(self):
-        if self.auto_plus_balancing and self.auto_plus_resample:
+        if self.auto_plus_balancing and self.auto_plus_sample:
             dataframe = self._run_auto_mode('balancing', save=False)
-            dataframe = self._run_auto_mode('resample', dataframe, save=False)
+            dataframe = self._run_auto_mode('sample', dataframe, save=False)
         elif self.auto_plus_balancing:
             dataframe = self._run_auto_mode('balancing', save=False)
-        elif self.auto_plus_resample:
-            dataframe = self._run_auto_mode('resample', save=False)
+        elif self.auto_plus_sample:
+            dataframe = self._run_auto_mode('sample', save=False)
         else:
             dataframe = None
 
@@ -240,9 +240,9 @@ class PreProcAuto(ChemInfPreProc):
                 return {'train': train_dataframe, 'test': test_dataframe}
                 """
 
-        elif submode == 'resample' or submode == 'balancing':
-            if submode == 'resample':
-                self.percentage = self.resample_ratio
+        elif submode == 'sample' or submode == 'balancing':
+            if submode == 'sample':
+                self.percentage = self.sample_ratio
             elif submode == 'balancing':
                 self.percentage = 1
             file_path = self._make_auto_outfile(submode)
@@ -272,21 +272,21 @@ def balancing_dataframe(dataframe, percentage=1):
     dataframe_class0 = dataframe[dataframe['class'] == 0]
     dataframe_class1 = dataframe[dataframe['class'] == 1]
 
-    dataframe_class1_resampled = resample_dataframe(dataframe_class1, 1)
+    dataframe_class1_sampled = sample_dataframe(dataframe_class1, 1)
 
-    data_div = dataframe_class1_resampled['class'].value_counts()
+    data_div = dataframe_class1_sampled['class'].value_counts()
     nr_samples = int(np.round(data_div[1]*percentage, decimals=0))
 
     if nr_samples > 1:
-        dataframe_class0_balancing = resample(dataframe_class0,
+        dataframe_class0_balancing = sample(dataframe_class0,
                                               replace=False,
                                               n_samples=nr_samples,
                                               random_state=randrange(100, 999))
 
-    return pd.concat([dataframe_class0_balancing, dataframe_class1_resampled])
+    return pd.concat([dataframe_class0_balancing, dataframe_class1_sampled])
 
 
-def resample_dataframe(dataframe, percentage=1):
+def sample_dataframe(dataframe, percentage=1):
     return dataframe.sample(frac=percentage, random_state=randrange(100, 999), axis=0)
 
 
