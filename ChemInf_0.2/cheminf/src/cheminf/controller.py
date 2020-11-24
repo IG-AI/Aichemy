@@ -14,14 +14,13 @@ ALL_MODES = MODEL_MODES + DATA_MODES + AUTO_MODES + SUBMODES
 
 OCCASIONAL_FLAGS = ['outfile', 'outfile2', 'classifier', 'models_dir', 'percentage', 'shuffle', 'significance',
                     'name', 'override_config', 'chunksize', 'nr_core']
-
-ALL_FLAGS = ['infile', 'name', 'override_config'] + OCCASIONAL_FLAGS
+ALL_FLAGS = ['input', 'name', 'override_config'] + OCCASIONAL_FLAGS
 
 PYTORCH_OPTIMIZERS = ['Adam', 'AdamW', 'Adamax', 'RMSprop', 'SGD', 'Adagrad', 'Adadelta']
 TORCHTOOLS_OPTIMIZERS = ['RangerLars']
 
 
-class ChemInfInput(object):
+class ChemInfPref(object):
     def __init__(self, config_file):
         self.args = self.argument_parser()
         for flag in OCCASIONAL_FLAGS:
@@ -106,10 +105,11 @@ class ChemInfInput(object):
                                    help="Choose one or all classifiers for model operations")
 
         for subparser in all_parsers:
-            subparser.add_argument('-i', '--infile',
+            subparser.add_argument('-i', '--infiles',
                                    required=True,
-                                   help="(For 'build, 'validate', 'predict') "
-                                        "Specify the file containing the data.")
+                                   nargs='+',
+                                   help="Specify the file containing the data. For postproc plot mode the infile could "
+                                        "be combine with multiple infiles to add data to one plot")
 
         date = datetime.now()
         current_date = date.strftime("%d-%m-%Y")
@@ -172,7 +172,8 @@ class ChemInfInput(object):
                                    type=int,
                                    help="Specify the size of chunks the files should be divided into.")
 
-        for subparser in [parser_preproc_balancing, parser_preproc_resample, parser_preproc_split, parser_preproc_trim]:
+        for subparser in [parser_auto, parser_preproc_balancing, parser_preproc_resample, parser_preproc_split,
+                          parser_preproc_trim]:
             subparser.add_argument('-nc', '--nr_core',
                                    default=1,
                                    type=int,
@@ -222,12 +223,16 @@ class ChemInfConfig(object):
                 old_value = getattr(self.execute, key)
             value_type = old_value.__class__.__name__
 
-            if f"{value_type}" == 'bool':
+            if f"{value_type}" == 'str':
+                pass
+            elif f"{value_type}" == 'bool':
                 value = boolean(value)
             elif f"{value_type}" == 'list':
                 value = config_to_list(value)
             else:
+                print(f"{value_type}({value})")
                 value = eval(f"{value_type}({value})")
+
             obj = eval(f"self.{attr_pos}")
             print(f"Changed configuration for '{key}' from '{old_value}' to '{value}'")
             setattr(obj, key, value)
@@ -289,7 +294,7 @@ class ConfigExec(object):
             self.plot_del_sum = boolean(config['postproc']['plot_del_sum'])
 
 
-class ChemInfController(ChemInfInput):
+class ChemInfController(ChemInfPref):
     model_modes = MODEL_MODES
     data_modes = DATA_MODES
     auto_modes = AUTO_MODES
@@ -317,7 +322,7 @@ class ChemInfController(ChemInfInput):
         config_files = [f"{self.src_dir}/config/classifiers.ini", f"{self.src_dir}/config/execute.ini"]
         super(ChemInfController, self).__init__(config_files)
         self.name = self.args.name
-        self.update_infile()
+        self.update_infiles()
         self.add_project_dir()
 
         if self.args.mode in self.model_modes or self.args.mode in self.auto_modes:
@@ -329,19 +334,25 @@ class ChemInfController(ChemInfInput):
         if self.args.mode == 'preproc' or self.args.mode == 'postproc' or self.args.mode == 'auto':
             self.update_outfile()
 
-    def update_infile(self):
-        if not os.path.exists(self.args.infile):
-            if self.args.mode == 'postproc':
-                infile = f"{self.src_dir}/data/predictions/{self.args.name}/{self.args.infile}"
-            else:
-                infile = f"{self.src_dir}/data/{self.args.infile}"
+    def update_infiles(self):
+        if len(self.args.infiles) == 1:
+            infile = self.args.infiles[0]
+            if not os.path.exists(infile):
+                if self.args.mode == 'postproc':
+                    _infile = f"{self.src_dir}/data/{self.args.name}/predictions/{infile}"
+                else:
+                    _infile = f"{self.src_dir}/data/{infile}"
 
-            if os.path.isfile(infile):
-                self.args.infile = infile
-            else:
-                raise FileNotFoundError(f"Couldn't find the input file, both absolut path and file name in the data "
-                                        f"directory in the ChemInf source directory ({self.src_dir}/data) has been "
-                                        f"explored")
+                if os.path.isfile(_infile):
+                    self.args.infile = _infile
+                else:
+                    raise FileNotFoundError(f"Couldn't find the input file, both absolut path and file name in the data "
+                                            f"directory in the ChemInf source directory ({self.src_dir}/data) has been "
+                                            f"explored")
+
+        elif hasattr(self.args, 'post_mode'):
+            if any([not os.path.exists(infile) for infile in self.args.infile]):
+                raise ValueError("Multiple inputs needs to be provided with absolute and relative paths")
 
     def add_project_dir(self):
         self.project_dir = f"{self.src_dir}/data/{self.name}"
@@ -352,29 +363,32 @@ class ChemInfController(ChemInfInput):
             pass
 
     def update_outfile(self):
-        infile_name, infile_extension = os.path.splitext(os.path.basename(self.args.infile))
-        if self.args.outfile is None or self.args.outfile2 is None:
-            if self.args.mode == 'preproc':
-                if self.args.preproc_mode == 'trim':
-                    self.args.outfile = f"{self.src_dir}/data/{infile_name}_trimmed{infile_extension}"
+        if hasattr(self.args, 'infile'):
+            infile_name, infile_extension = os.path.splitext(os.path.basename(self.args.infile))
+            if self.args.outfile is None or self.args.outfile2 is None:
+                if self.args.mode == 'preproc':
+                    if self.args.preproc_mode == 'trim':
+                        self.args.outfile = f"{self.src_dir}/data/{infile_name}_trimmed{infile_extension}"
 
-                elif self.args.preproc_mode == 'balancing':
-                    self.args.outfile = f"{self.src_dir}/data/{infile_name}_balanced{infile_extension}"
+                    elif self.args.preproc_mode == 'balancing':
+                        self.args.outfile = f"{self.src_dir}/data/{infile_name}_balanced{infile_extension}"
 
-                elif self.args.preproc_mode == 'resample':
-                    self.args.outfile = f"{self.src_dir}/data/{infile_name}_resampled{infile_extension}"
+                    elif self.args.preproc_mode == 'resample':
+                        self.args.outfile = f"{self.src_dir}/data/{infile_name}_resampled{infile_extension}"
 
-                elif self.args.preproc_mode == 'split':
-                    if self.args.outfile is None:
-                        self.args.outfile = f"{self.src_dir}/data/{infile_name}_train{infile_extension}"
-                    if self.args.outfile2 is None:
-                        self.args.outfile2 = f"{self.src_dir}/data/{infile_name}_test{infile_extension}"
-                else:
-                    ModeError(self.args.mode, self.args.preproc_mode)
+                    elif self.args.preproc_mode == 'split':
+                        if self.args.outfile is None:
+                            self.args.outfile = f"{self.src_dir}/data/{infile_name}_train{infile_extension}"
+                        if self.args.outfile2 is None:
+                            self.args.outfile2 = f"{self.src_dir}/data/{infile_name}_test{infile_extension}"
+                    else:
+                        ModeError(self.args.mode, self.args.preproc_mode)
 
-            elif self.args.mode == 'postproc':
-                self.args.outfile = f"{self.src_dir}/data/{self.name}/predictions/" \
-                                    f"{infile_name}_summary{infile_extension}"
+                elif self.args.mode == 'postproc':
+                    self.args.outfile = f"{self.src_dir}/data/{self.name}/predictions/" \
+                                        f"{infile_name}_summary{infile_extension}"
+        else:
+            pass
 
     def update_model_path(self):
         if not self.args.models_dir:
