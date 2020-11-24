@@ -222,18 +222,20 @@ class ChemInfConfig(object):
             except AttributeError:
                 attr_pos = 'execute'
                 old_value = getattr(self.execute, key)
-            old_value_type = old_value.__class__.__name__
+            value_type = old_value.__class__.__name__
 
-            if f"{old_value_type}" == 'bool':
+            if f"{value_type}" == 'bool':
                 value = boolean(value)
-            elif f"{old_value_type}" == 'list':
+            elif f"{value_type}" == 'list':
                 value = config_to_list(value)
             else:
-                value_type = value.__class__.__name__
-                if not value_type == old_value_type:
-                    error_massage = f"Configuration {config} has type {value_type}, but it most have the same type as " \
-                                    f"default as the original config which has type {old_value_type}"
-                    raise TypeError(error_massage)
+                if value_type != 'str':
+                    try:
+                        value = eval(f"{value_type}({value})")
+                    except ValueError:
+                        error_massage = f"The override configuration value ({value}) for the configuration {config} doesn't" \
+                                        f"have similar type has default value"
+                        raise TypeError(error_massage)
 
             obj = eval(f"self.{attr_pos}")
             print(f"Changed configuration for '{key}' from '{old_value}' to '{value}'")
