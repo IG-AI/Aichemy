@@ -348,13 +348,23 @@ class ChemInfController(ChemInfPref):
                 if os.path.isfile(_infile):
                     self.args.infile = _infile
                 else:
-                    raise FileNotFoundError(f"Couldn't find the input file, both absolut path and file name in the data "
-                                            f"directory in the ChemInf source directory ({self.src_dir}/data) has been "
-                                            f"explored")
+                    raise FileNotFoundError(f"Couldn't find the input file, both absolut path and file name in the "
+                                            f"data directory in the ChemInf source directory ({self.src_dir}/data) has "
+                                            f"been explored")
 
-        elif hasattr(self.args, 'post_mode'):
+        elif self.args.post_mode == 'plot':
             if any([not os.path.exists(infile) for infile in self.args.infile]):
                 raise ValueError("Multiple inputs needs to be provided with absolute and relative paths")
+
+        else:
+            if self.args.pre_mode:
+                submode = f" with submode {self.args.pre_mode}"
+            elif self.args.post_mode:
+                submode = f" with submode {self.args.post_mode}"
+            else:
+                submode = ""
+            error_massage = f"Mode {self.args.mode}{submode} doesn't support multiple input files"
+            raise ValueError(error_massage)
 
     def add_project_dir(self):
         self.project_dir = f"{self.src_dir}/data/{self.name}"
