@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=adam_inv_cheminf
+#SBATCH --job-name=conf_noiz_cheminf
 #SBATCH --time=24:00:00
 
 #SBATCH --nodes=1
@@ -13,7 +13,7 @@
 #SBATCH --mail-user daniel.agstrand.5971@student.uu.se
 #SBATCH --mail-type=none
 
-#SBATCH --array=1-55
+#SBATCH --array=1-7
 
 work_dir=/proj/carlssonlab/users/x_danag/ChemInf/ChemInf_0.2
 
@@ -21,6 +21,7 @@ cd $work_dir
 
 name=$(awk NR=="$SLURM_ARRAY_TASK_ID" "$SETUP" | cut -d$'\t' -f1)
 config_override=$(awk NR=="$SLURM_ARRAY_TASK_ID" "$SETUP" | cut -d$'\t' -f2)
+input=$(awk NR=="$SLURM_ARRAY_TASK_ID" "$SETUP"| cut -d$'\t' -f3)
 
 module use /proj/carlssonlab/envmod; module load FRONTLINE/latest
 
@@ -30,6 +31,6 @@ echo -e "\n---------------------------------------------------------------------
 
 srun -N1 --ntasks=1 --cpus-per-task=4 --mem=50G --time=24:00:00 --exclusive \
 singularity exec /proj/carlssonlab/singularity/frontline.simg \
-python cheminf/ auto -cl nn -i $INFILE -n $name -cf $config_override -ch 100000 -nc 4
+python cheminf/ auto -i $input -cl nn -n $name -cf $config_override -ch 100000 -nc 4
 
-# sbatch --export=ALL,INFILE=cheminf/data/d2_full.csv,SETUP=scripts/slurm/projects/inv_nn_optimize_Adam_setup.csv scripts/slurm/sbatch_cheminf_auto.sh
+# sbatch --export=ALL,SETUP=scripts/slurm/projects/inv_nn_noiselevels_setup.csv scripts/slurm/sbatch_cheminf_auto_different_inputs.sh
