@@ -172,7 +172,8 @@ class ChemInfInput(object):
                                    type=int,
                                    help="Specify the size of chunks the files should be divided into.")
 
-        for subparser in [parser_preproc_balancing, parser_preproc_resample, parser_preproc_split, parser_preproc_trim]:
+        for subparser in [parser_auto, parser_preproc_balancing, parser_preproc_resample, parser_preproc_split,
+                          parser_preproc_trim]:
             subparser.add_argument('-nc', '--nr_core',
                                    default=1,
                                    type=int,
@@ -220,14 +221,19 @@ class ChemInfConfig(object):
             except AttributeError:
                 attr_pos = 'execute'
                 old_value = getattr(self.execute, key)
-            value_type = old_value.__class__.__name__
+            old_value_type = old_value.__class__.__name__
 
-            if f"{value_type}" == 'bool':
+            if f"{old_value_type}" == 'bool':
                 value = boolean(value)
-            elif f"{value_type}" == 'list':
+            elif f"{old_value_type}" == 'list':
                 value = config_to_list(value)
             else:
-                value = eval(f"{value_type}({value})")
+                value_type = value.__class__.__name__
+                if not value_type == old_value_type:
+                    error_massage = f"Configuration {config} has type {value_type}, but it most have the same type as " \
+                                    f"default as the original config which has type {old_value_type}"
+                    raise TypeError(error_massage)
+
             obj = eval(f"self.{attr_pos}")
             print(f"Changed configuration for '{key}' from '{old_value}' to '{value}'")
             setattr(obj, key, value)
