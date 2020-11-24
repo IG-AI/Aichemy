@@ -355,8 +355,21 @@ class ChemInfController(ChemInfPref):
                                             f"been explored")
 
         elif self.args.post_mode == 'plot':
-            if any([not os.path.exists(infile) for infile in self.args.infile]):
-                raise ValueError("Multiple inputs needs to be provided with absolute and relative paths")
+            if all([not os.path.exists(infile) for infile in self.args.infiles]):
+                raise ValueError("Multiple inputs needs to be provided with absolute or relative paths.")
+
+            elif any([not os.path.exists(infile) for infile in self.args.infiles]):
+                none_existing = []
+                for infile in self.args.infiles:
+                    if not os.path.exists(infile):
+                        none_existing.append(infile)
+
+                if len(none_existing) > 1:
+                    plural_string = "s don't"
+                else:
+                    plural_string = " doesn't"
+                error_massage = f"The following file{plural_string} exist: {' '.join(none_existing)}"
+                raise ValueError(error_massage)
 
         else:
             if self.args.pre_mode:
