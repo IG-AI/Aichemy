@@ -14,7 +14,8 @@ ALL_MODES = MODEL_MODES + DATA_MODES + AUTO_MODES + SUBMODES
 
 OCCASIONAL_FLAGS = ['outfile', 'outfile2', 'classifier', 'models_dir', 'percentage', 'shuffle', 'significance',
                     'name', 'override_config', 'chunksize', 'nr_core']
-ALL_FLAGS = ['input', 'name', 'override_config'] + OCCASIONAL_FLAGS
+
+ALL_FLAGS = ['infile', 'name', 'override_config'] + OCCASIONAL_FLAGS
 
 PYTORCH_OPTIMIZERS = ['Adam', 'AdamW', 'Adamax', 'RMSprop', 'SGD', 'Adagrad', 'Adadelta']
 TORCHTOOLS_OPTIMIZERS = ['RangerLars']
@@ -221,17 +222,18 @@ class ChemInfConfig(object):
             except AttributeError:
                 attr_pos = 'execute'
                 old_value = getattr(self.execute, key)
-            value_type = old_value.__class__.__name__
+            old_value_type = old_value.__class__.__name__
 
-            if f"{value_type}" == 'str':
-                pass
-            elif f"{value_type}" == 'bool':
+            if f"{old_value_type}" == 'bool':
                 value = boolean(value)
-            elif f"{value_type}" == 'list':
+            elif f"{old_value_type}" == 'list':
                 value = config_to_list(value)
             else:
-                print(f"{value_type}({value})")
-                value = eval(f"{value_type}({value})")
+                value_type = value.__class__.__name__
+                if not value_type == old_value_type:
+                    error_massage = f"Configuration {config} has type {value_type}, but it most have the same type as " \
+                                    f"default as the original config which has type {old_value_type}"
+                    raise TypeError(error_massage)
 
             obj = eval(f"self.{attr_pos}")
             print(f"Changed configuration for '{key}' from '{old_value}' to '{value}'")
