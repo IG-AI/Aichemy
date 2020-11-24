@@ -233,8 +233,8 @@ class ChemInfConfig(object):
                     try:
                         value = eval(f"{value_type}({value})")
                     except ValueError:
-                        error_massage = f"The override configuration value ({value}) for the configuration {config} doesn't" \
-                                        f"have similar type has default value"
+                        error_massage = f"The override configuration value ({value}) for the configuration {config} " \
+                                        f"doesn't have equal type as the default value ({old_value})"
                         raise TypeError(error_massage)
 
             obj = eval(f"self.{attr_pos}")
