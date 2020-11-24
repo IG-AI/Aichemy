@@ -10,7 +10,7 @@ from abc import ABCMeta, abstractmethod
 from ..cheminf.utils import read_dataframe, save_dataframe, shuffle_dataframe, MutuallyExclusiveError, \
     ModeError, NoMultiCoreSupportError
 
-MULTICORE_SUPPORT = ['balancing', 'resample']
+MULTICORE_SUPPORT = ['balancing', 'resample', 'auto']
 
 class ChemInfPreProc(object, metaclass=ABCMeta):
     def __init__(self, controller):
@@ -89,7 +89,12 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
                 pool.join()
 
                 dataframe = shuffle_dataframe(dataframe)
-                save_dataframe(dataframe, self.outfile)
+                if save:
+                    save_dataframe(dataframe, self.outfile)
+                    return self.outfile
+                else:
+                    return dataframe
+
         else:
             raise NoMultiCoreSupportError(submode)
 
@@ -191,7 +196,6 @@ class PreProcNormal(ChemInfPreProc):
             self._single_core(self.submode)
 
 
-# Todo: Implement multicore support fro preproc-auto mode
 class PreProcAuto(ChemInfPreProc):
     def __init__(self, controller):
         super(PreProcAuto, self).__init__(controller)
@@ -229,7 +233,7 @@ class PreProcAuto(ChemInfPreProc):
                 return {'train': train_file_path, 'test': test_file_path}
             else:
                 # Todo: Fix bug with piping of dataframe to models
-                raise NotImplementedError("Not saving preproc results not yet implemented")
+                raise NotImplementedError("'Not saving preproc results' not yet implemented")
                 """
                 train_dataframe, test_dataframe = self._single_core(submode, dataframe, save=False)
                 self.percentage = None
@@ -242,16 +246,17 @@ class PreProcAuto(ChemInfPreProc):
             elif submode == 'balancing':
                 self.percentage = 1
             file_path = self._make_auto_outfile(submode)
-            if save:
-                dataframe_path = self._single_core(submode, dataframe, outfile=file_path)
-                self.percentage = None
-                return dataframe_path
+            
+            if self.nr_core == 1:
+                dataframe_data = self._single_core(submode, dataframe, outfile=file_path, save=save)
+            elif self.nr_core > 1:
+                dataframe_data = self._multicore(submode, dataframe, outfile=file_path, save=save)
             else:
-                dataframe = self._single_core(submode, dataframe, save=False)
-                self.percentage = None
-                return dataframe
-        else:
-            ModeError(self.mode, submode)
+                error_message = f"Unsupported value for --nr_core: {self.nr_core}"
+                raise ValueError(error_message)
+            
+            self.percentage = None
+            return dataframe_data
 
     def _make_auto_outfile(self, suffix, file=None):
         if file is None:
