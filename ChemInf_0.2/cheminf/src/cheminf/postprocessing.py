@@ -1,8 +1,9 @@
 import os
 
-import matplotlib.pyplot as plt
-
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 from abc import ABCMeta, abstractmethod
 
 from ..cheminf.utils import ModeError
@@ -23,27 +24,35 @@ class ChemInfPostProc(object, metaclass=ABCMeta):
     def run(self):
         pass
 
-    def make_summary(self, files):
-        for file_list in files:
-            infile = file_list[0]
-            outfile = file_list[1]
-            if not self.significance:
-                significance_list = [(1 / self.error_level) * i for i in range(1, self.error_level)]
-            else:
-                significance_list = [self.significance]
-            summary_array = read_pred_file(infile, significance_list, self.error_level)
-            write_pred_summary_file(outfile, summary_array, significance_list)
+    def make_summary(self, infile, outfile):
+        if not self.significance:
+            significance_list = [(1 / self.error_level) * i for i in range(1, self.error_level)]
+        else:
+            significance_list = [self.significance]
+        summary_array = read_pred_file(infile, significance_list, self.error_level)
+        write_pred_summary_file(outfile, summary_array, significance_list)
 
-    def make_plot(self, files, del_sum):
-        for file_list in files:
-            infile = file_list[0]
-            outfile = file_list[1]
+    def make_plot(self, infiles, outfile, del_sum):
+        # parse command line arguments
+        headers = set()
+        library = {}
+
+        # iterate over the inputfiles
+        for infile in infiles:
+            header, data = read_pred_summary(infile)
+            headers.add(" ".join(header))
+            library[infile] = data
             if not os.path.exists(outfile):
-                self.make_summary([file_list])
-            header, data = read_pred_summary(outfile)
-            calibration_plots(header, data, infile)
-            if del_sum:
-                os.remove(outfile)
+                self.make_summary(infile, outfile)
+
+        # check if all headers have same format
+        assert len(headers) == 1, "Headers in inputfiles have different formats!"
+
+        # create scatter plots
+        calibration_plots(library, header, outfile)
+
+        if del_sum:
+            os.remove(outfile)
 
     def get(self, key):
         return getattr(self, key)
@@ -54,14 +63,13 @@ class PostProcNormal(ChemInfPostProc):
         super(PostProcNormal, self).__init__(controller)
         self.mode = controller.args.postproc_mode
         self.outfile = controller.args.outfile
-        self.infile = controller.args.infile
+        self.infiles = controller.args.infile
 
     def run(self):
-        files = [[self.infile, self.outfile]]
         if self.mode == 'summary':
-            self.make_summary(files)
+            self.make_summary(self.infiles, self.outfile)
         elif self.mode == 'plot':
-            self.make_plot(files, self.plot_del_sum)
+            self.make_plot(self.infiles, self.outfile, self.plot_del_sum)
         else:
             raise ModeError("postproc", self.mode)
 
@@ -88,14 +96,17 @@ class PostProcAuto(ChemInfPostProc):
                        f"{self.name}_{classifier}_predict_summary.csv")
             files.append([self.pred_files[classifier], outfile])
 
-        if self.auto_plus_sum:
-            self.make_summary(files)
-        if self.auto_plus_plot:
+        for file_list in files:
+            infile = file_list[0]
+            outfile = file_list[1]
             if self.auto_plus_sum:
-                del_sum = False
-            else:
-                del_sum = True
-            self.make_plot(files, del_sum)
+                self.make_summary(infile, outfile)
+            if self.auto_plus_plot:
+                if self.auto_plus_sum:
+                    del_sum = False
+                else:
+                    del_sum = True
+                self.make_plot(infile, outfile, del_sum)
 
 
 def write_pred_summary_file(outfile, summary_array, significance_list):
@@ -264,36 +275,56 @@ def read_pred_summary(infile):
     return header, data
 
 
-def cal_plot(x, y, name, factor):
-    """Writing out a plot with a name based on the prefix name
-    and the factor.
-    """
-
-    plt.style.use('seaborn-darkgrid')
-
-    if 'error_rate' in factor:
-        plt.plot([0, 1], [0, 1], '--', c='gray')
-    plt.plot(x, y, linewidth=3)
-    plt.ylabel(factor, fontweight='bold')
-    plt.xlabel('significance', fontweight='bold')
-    plt.ylim((0, 1))
-    plt.xlim((0, 1))
-    plt.savefig(f'{name}_{factor}.png', dpi=300)
-    plt.clf()
-
-
-def calibration_plots(header, data, file_path):
+def calibration_plots(library, header, prefix):
     """Calculating summary statistics and plotting them for a set of
     error levels.
     """
 
-    x = np.copy(data[:, 0])
-
-    name, _ = os.path.splitext(file_path)
+    settings = list(library.keys())
+    x = np.copy(library[settings[0]][:, 0])
 
     for i in range(9, len(header)):
         factor = header[i]
-        y = data[:, i]
-        y_masked = np.ma.masked_invalid(y)
-        x_masked = np.ma.array(x, mask=y_masked.mask)
-        cal_plot(x_masked, y_masked, name, factor)
+        y_arr = []
+        for setting in settings:
+            y = library[setting][:, i]
+            # print(y)
+            y_masked = np.ma.masked_invalid(y)
+            x_masked = np.ma.array(x, mask=y_masked.mask)
+            y_arr.append(y_masked)
+
+        x_arr = np.asarray([x_masked for _ in settings])
+        y_arr = np.asarray(y_arr)
+
+        _calibration_plots(x_arr, y_arr, prefix, factor, settings)
+
+
+def _calibration_plots(x_arr, y_arr, prefix, factor, settings):
+    """Writing out a plot with a name based on the prefix name
+    and the factor.
+    """
+    # Create color palette
+    base_colors = sns.color_palette("YlOrRd", len(settings))
+    fig, ax = plt.subplots()
+    plt.style.use('seaborn-whitegrid')
+
+    if 'error_rate' in factor:
+        plt.plot([0, 1], [0, 1], '--', c='gray')
+
+    for idx, setting in enumerate(settings):
+        plt.plot(x_arr[idx], y_arr[idx], linewidth=2,
+                 color=base_colors[idx], label=setting)
+
+    plt.ylabel(factor, fontweight='bold')
+    plt.xlabel('significance', fontweight='bold')
+    plt.ylim((0, 1))
+    plt.xlim((0, 1))
+
+    # add legend
+    handles, labels = ax.get_legend_handles_labels()
+    filenames = [os.path.split(label)[1] for label in labels]
+    lgd = ax.legend(handles, filenames, loc='lower center', frameon=True,
+                    ncol=1, bbox_to_anchor=(0.5, -0.4), fontsize=12)
+
+    plt.savefig("%s.%s.png" % (prefix, factor), dpi=300, bbox_inches="tight")
+    plt.clf()
