@@ -1,5 +1,4 @@
 import os
-import sys
 
 import cloudpickle
 import numpy as np
@@ -7,7 +6,8 @@ from abc import ABCMeta, abstractmethod
 
 from ..cheminf.classifiers import ChemInfClassifier
 from ..cheminf.preprocessing import PreProcAuto, split_dataframe
-from ..cheminf.utils import read_dataframe, split_array
+from ..cheminf.utils import read_dataframe, split_array, get_size
+
 
 class ChemInfModel(object, metaclass=ABCMeta):
     def __init__(self, controller, model_type):
@@ -42,6 +42,11 @@ class ChemInfModel(object, metaclass=ABCMeta):
     @abstractmethod
     def validate(self):
         pass
+
+    # Todo: Finish get_size function
+    def get_size(self):
+        size = get_size(self)
+        return f"Size of model is {size} bytes"
 
     def save_models(self, model=None, iteration=0):
         if model is None:
@@ -389,7 +394,7 @@ class ModelNN(ChemInfModel):
         from ..cheminf.controller import PYTORCH_OPTIMIZERS, TORCHTOOLS_OPTIMIZERS
 
         if self.config.optimizer in PYTORCH_OPTIMIZERS:
-            exec(f"from torch.optim import {self.config.optimizer }")
+            exec(f"from torch.optim import {self.config.optimizer}")
         elif self.config.optimizer in TORCHTOOLS_OPTIMIZERS:
             exec(f"from libs.torchtools.optim import {self.config.optimizer}")
         else:
@@ -404,7 +409,7 @@ class ModelNN(ChemInfModel):
         from skorch.dataset import Dataset
         from skorch.helper import predefined_split
         from torch import nn
-        from torch import FloatTensor
+        from torch import FloatTensor, Tensor
 
         from libs.nonconformist.base import ClassifierAdapter
         from libs.nonconformist.icp import IcpClassifier
@@ -425,8 +430,6 @@ class ModelNN(ChemInfModel):
 
         X = np.array(train_dataframe.iloc[:, 2:]).astype(np.float32)
         y = np.array(train_dataframe['class']).astype(np.int64)
-
-        print(f"OPTIMIZER: {self.optimizer}")
 
         for i in range(nr_models):
             if models is None:
@@ -474,18 +477,9 @@ class ModelNN(ChemInfModel):
                                         criterion__weight=class_weights,
                                         callbacks=[minus_ba, early_stop])
 
-            mem_info = f"\nMEMORY INFORMATION FOR MODEL: {i}\n" \
-                       f"------------------------------------------------------\n" \
-                       f"Tensor size: {sys.getsizeof(model)}\n" \
-                       f"Element size: {class_weights.element_size()}\n" \
-                       f"Number of elements: {class_weights.nelement()}\n" \
-                       f"Element memory size: {(class_weights.nelement() * class_weights.element_size())}" \
-                       f"\nBatch size: {model.batch_size}" \
-                       f"\n------------------------------------------------------\n"
+            print(f"\nSize of model is {get_size(model)} bytes")
 
-            print(mem_info)
-
-            print(f"Working on model {i}")
+            print(f"\nWorking on model {i}")
             icp = IcpClassifier(ClassifierNc(ClassifierAdapter(model), MarginErrFunc()))
             icp.fit(X[proper_train_set], y[proper_train_set])
             icp.calibrate(X[calib_set], y[calib_set])
@@ -517,7 +511,8 @@ class ModelNN(ChemInfModel):
             pred = np.round(pred, 6).astype('str')
 
             p_value = {'P(0)': pred[:, 0].tolist(),
-                       'P(1)': pred[:, 1].tolist()}
+                       'P(1)': pred[:, 1].tolist()
+                       }
 
             p_value_results.append(pd.DataFrame(p_value).astype('float32'))
 
