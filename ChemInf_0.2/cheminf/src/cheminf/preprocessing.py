@@ -278,7 +278,7 @@ def balancing_dataframe(dataframe, percentage=1):
     nr_samples = int(np.round(data_div[1]*percentage, decimals=0))
 
     if nr_samples > 1:
-        dataframe_class0_balancing = sample(dataframe_class0,
+        dataframe_class0_balancing = resample(dataframe_class0,
                                               replace=False,
                                               n_samples=nr_samples,
                                               random_state=randrange(100, 999))

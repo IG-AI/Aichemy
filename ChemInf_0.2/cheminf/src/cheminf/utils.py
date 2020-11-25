@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import time
 
 import numpy as np
@@ -329,6 +330,29 @@ def split_array(array, percent_to_first, array_size=None, shuffle=False):
     return array_1, array_2
 
 
+def get_size(obj, seen=None):
+    """Recursively finds size of objects
+       Author: Jonathan Kosgei, jonathan@saharacluster.com
+    """
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    # Important mark as seen *before* entering recursion to gracefully handle
+    # self-referential objects
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) for v in obj.values()])
+        size += sum([get_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size
+
+
 class ModeError(Exception):
     def __init__(self, mode, submode):
         message = f"Submode '{submode}' isn't supported with {mode} in this code block"
@@ -351,7 +375,6 @@ class MutuallyExclusiveError(Exception):
     def __init__(self, arg1, arg2):
         message = f"You must specify exactly one of {arg1} and {arg2}"
         super(Exception, self).__init__(message)
-
 
 # Cool self.get() method idea:
 """

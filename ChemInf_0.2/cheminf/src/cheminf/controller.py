@@ -330,7 +330,7 @@ class ChemInfController(ChemInfPref):
         self.add_project_dir()
 
         if self.args.mode in self.model_modes or self.args.mode in self.auto_modes:
-            self.update_model_path()
+            self.add_model_path()
 
         if self.args.mode in MODEL_MODES or self.args.mode == 'auto':
             self.add_predict_path()
@@ -339,7 +339,8 @@ class ChemInfController(ChemInfPref):
             self.update_outfile()
 
     def update_infiles(self):
-        if len(self.args.infiles) == 1:
+        nr_infiles = len(self.args.infiles)
+        if nr_infiles == 1:
             infile = self.args.infiles[0]
             if not os.path.exists(infile):
                 if self.args.mode == 'postproc':
@@ -354,7 +355,7 @@ class ChemInfController(ChemInfPref):
                                         f"data directory in the ChemInf source directory ({self.src_dir}/data) has "
                                         f"been explored")
 
-        elif self.args.post_mode == 'plot':
+        elif self.args.postproc_mode == 'plot':
             if all([not os.path.exists(infile) for infile in self.args.infiles]):
                 raise ValueError("Multiple inputs needs to be provided with absolute or relative paths.")
 
@@ -380,18 +381,10 @@ class ChemInfController(ChemInfPref):
             error_massage = f"Mode {self.args.mode}{submode} doesn't support multiple input files"
             raise ValueError(error_massage)
 
-    def add_project_dir(self):
-        self.project_dir = f"{self.src_dir}/data/{self.name}"
-        try:
-            os.mkdir(self.project_dir)
-            print(f"Created the model directory: {self.project_dir}")
-        except FileExistsError:
-            pass
-
     def update_outfile(self):
-        if hasattr(self.args, 'infile'):
-            infile_name, infile_extension = os.path.splitext(os.path.basename(self.args.infile))
-            if self.args.outfile is None or self.args.outfile2 is None:
+        if self.args.outfile is None or self.args.outfile2 is None:
+            infile_name, infile_extension = os.path.splitext(os.path.basename(self.args.infiles[0]))
+            if hasattr(self.args, 'infile'):
                 if self.args.mode == 'preproc':
                     if self.args.preproc_mode == 'trim':
                         self.args.outfile = f"{self.src_dir}/data/{infile_name}_trimmed{infile_extension}"
@@ -410,13 +403,26 @@ class ChemInfController(ChemInfPref):
                     else:
                         ModeError(self.args.mode, self.args.preproc_mode)
 
-                elif self.args.mode == 'postproc':
-                    self.args.outfile = f"{self.src_dir}/data/{self.name}/predictions/" \
-                                        f"{infile_name}_summary{infile_extension}"
-        else:
+                elif self.args.postproc_mode == 'summary':
+                    self.args.outfile = f"{self.project_dir}/predictions/{infile_name}_summary{infile_extension}"
+
+            elif self.args.postproc_mode == 'plot':
+                infile_name = infile_name.replace("_summary", '')
+                print(infile_name)
+                self.args.outfile = f"{self.project_dir}/predictions/{infile_name}"
+
+            else:
+                pass
+
+    def add_project_dir(self):
+        self.project_dir = f"{self.src_dir}/data/{self.name}"
+        try:
+            os.mkdir(self.project_dir)
+            print(f"Created the project directory: {self.project_dir}")
+        except FileExistsError:
             pass
 
-    def update_model_path(self):
+    def add_model_path(self):
         if not self.args.models_dir:
             self.args.models_dir = f"{self.project_dir}/models"
 
@@ -431,7 +437,7 @@ class ChemInfController(ChemInfPref):
             _pred_files = {}
             if self.args.outfile is None:
                 for i, _classifier in enumerate(classifier_types):
-                    path = f"{self.predictions_dir}/{self.name}_{_classifier}_predict.csv"
+                    path = f"{self.predictions_dir}/{self.name}_{_classifier}_predictions.csv"
                     _pred_files[_classifier] = path
             else:
                 outfile_path, outfile = os.path.split(self.args.outfile)

@@ -1,4 +1,5 @@
 import os
+import sys
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,30 +30,26 @@ class ChemInfPostProc(object, metaclass=ABCMeta):
             significance_list = [(1 / self.error_level) * i for i in range(1, self.error_level)]
         else:
             significance_list = [self.significance]
+
         summary_array = read_pred_file(infile, significance_list, self.error_level)
         write_pred_summary_file(outfile, summary_array, significance_list)
 
-    def make_plot(self, infiles, outfile, del_sum):
+    def make_plot(self, infiles, outfile):
         # parse command line arguments
         headers = set()
         library = {}
 
-        # iterate over the inputfiles
+        # iterate over the input files
         for infile in infiles:
             header, data = read_pred_summary(infile)
             headers.add(" ".join(header))
             library[infile] = data
-            if not os.path.exists(outfile):
-                self.make_summary(infile, outfile)
 
         # check if all headers have same format
-        assert len(headers) == 1, "Headers in inputfiles have different formats!"
+        assert len(headers) == 1, "Headers in input files have different formats!"
 
         # create scatter plots
         calibration_plots(library, header, outfile)
-
-        if del_sum:
-            os.remove(outfile)
 
     def get(self, key):
         return getattr(self, key)
@@ -62,8 +59,8 @@ class PostProcNormal(ChemInfPostProc):
     def __init__(self, controller):
         super(PostProcNormal, self).__init__(controller)
         self.mode = controller.args.postproc_mode
+        self.infiles = controller.args.infiles
         self.outfile = controller.args.outfile
-        self.infiles = controller.args.infile
 
     def run(self):
         if self.mode == 'summary':
@@ -81,32 +78,39 @@ class PostProcAuto(ChemInfPostProc):
         self.auto_plus_plot = (self.mode == 'auto' and controller.config.execute.auto_plus_plot)
         self.auto_plus_sum = (self.mode == 'auto' and controller.config.execute.auto_plus_sum)
         self.pred_files = controller.args.pred_files
-        self.classifier_type = controller.classifier_types
+        self.classifier_types = controller.classifier_types
         self.nr_classifiers = len(controller.classifier_types)
         self.src_dir = controller.src_dir
 
     def run(self):
         files = []
         if self.classifier == 'all':
-            classifiers = self.classifier_type
+            classifiers = self.classifier_types
         else:
             classifiers = [self.classifier]
+
         for classifier in classifiers:
             outfile = (f"{self.src_dir}/data/{self.name}/predictions/"
-                       f"{self.name}_{classifier}_predict_summary.csv")
+                       f"{self.name}_{classifier}_predictions_summary.csv")
             files.append([self.pred_files[classifier], outfile])
 
         for file_list in files:
             infile = file_list[0]
             outfile = file_list[1]
-            if self.auto_plus_sum:
-                self.make_summary(infile, outfile)
+            print(infile)
+            print(outfile)
             if self.auto_plus_plot:
-                if self.auto_plus_sum:
-                    del_sum = False
-                else:
-                    del_sum = True
-                self.make_plot(infile, outfile, del_sum)
+                self.make_summary(infile, outfile)
+                infile = outfile
+                outfile_name, outfile_extension = os.path.splitext(outfile)
+                output_plot = outfile_name.replace("_summary", '')
+                self.make_plot([infile], output_plot)
+                if not self.auto_plus_sum:
+                    os.remove(outfile)
+            elif self.auto_plus_sum:
+                self.make_summary(infile, outfile)
+            else:
+                pass
 
 
 def write_pred_summary_file(outfile, summary_array, significance_list):
