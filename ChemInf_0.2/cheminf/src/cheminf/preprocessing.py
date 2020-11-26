@@ -19,10 +19,10 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
         self.infile = controller.args.infile
         self.percentage = controller.args.percentage
         self.mode = controller.args.mode
-        if controller.args.nr_core:
-            self.nr_core = controller.args.nr_core
+        if controller.args.nr_cores:
+            self.nr_cores = controller.args.nr_cores
         else:
-            self.nr_core = 1
+            self.nr_cores = 1
         self.chunksize = controller.args.chunksize
         self.outfile = controller.args.outfile
         self.outfile2 = controller.args.outfile2
@@ -34,8 +34,8 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
 
     def _single_core(self, submode, dataframes=None, outfile=None, outfile2=None, save=True):
         if dataframes is None:
-            infile = self.infile
-            dataframes = read_dataframe(infile, self.chunksize)
+            self._check_chunksize()
+            dataframes = read_dataframe(self.infile, self.chunksize)
         if outfile is None:
             outfile = self.outfile
 
@@ -62,56 +62,67 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
         else:
             return dataframe
 
-    # Todo: Make fail-safe when chunksize is smaller than the rows in the input dataframe
     def _multicore(self, submode, dataframes=None, outfile=None, outfile2=None, save=True):
+        import multiprocessing as mp
         if submode in MULTICORE_SUPPORT:
             if dataframes is None:
-                infile = self.infile
-                dataframes = read_dataframe(infile, self.chunksize)
+                self._check_chunksize()
+                dataframes = read_dataframe(self.infile, self.chunksize)
             if outfile is None:
                 outfile = self.outfile
 
-            global mp
-            mp = __import__('multiprocessing', globals(), locals())
-            print(f"Available cores: {mp.cpu_count()}")
-
+            dataframe = pd.DataFrame()
+            preproc = getattr(self, submode)
             ctx = mp.get_context('spawn')
-            with ctx.Pool(self.nr_core) as pool:
-                dataframe = pd.DataFrame()
-                print(f"Starting multicore resampling with {self.nr_core} cores")
-                utils = getattr(self, submode)
-                pool_stack = pool.imap_unordered(utils, dataframes)
+            print(f"Starting multicore {submode} with {self.nr_cores} cores")
+            with ctx.Pool(self.nr_cores) as pool:
+                pool_stack = pool.imap_unordered(preproc, dataframes)
                 for i, pool_dataframe in enumerate(pool_stack):
-                    print(f"\nWorking on chunk {i}\n-----------------------------------")
+                    print(f"\nCombining pool dataframe {i}\n-----------------------------------")
                     dataframe = pd.concat([dataframe, pool_dataframe])
-
                 pool.close()
                 pool.join()
 
-                dataframe = shuffle_dataframe(dataframe)
-                if save:
-                    save_dataframe(dataframe, self.outfile)
-                    return self.outfile
-                else:
-                    return dataframe
+            dataframe = shuffle_dataframe(dataframe)
+            if save:
+                save_dataframe(dataframe, outfile)
+                return outfile
+            else:
+                return dataframe
 
         else:
             raise NoMultiCoreSupportError(submode)
 
+    def _check_chunksize(self):
+        if self.chunksize:
+            with open(self.infile) as fin:
+                for i in range(self.chunksize):
+                    try:
+                        next(fin)
+                    except StopIteration:
+                        print(f"The applied chunk size ({self.chunksize}) is bigger then the input file. Therefore the "
+                              f"chunking will disabled")
+                        self.chunksize = None
+                        break
+
     def balancing(self, dataframes=None):
-        return self._sample('balancing', dataframes)
+        try:
+            data = self._sample_or_balancing('balancing', dataframes)
+        except Exception as e:
+            print(e)
+            data = None
+        return data
 
     def sample(self, dataframes=None):
-        return self._sample('sample', dataframes)
+        return self._sample_or_balancing('sample', dataframes)
 
-    def _sample(self, submode, dataframes=None):
+    def _sample_or_balancing(self, submode, dataframes=None):
         if submode == 'balancing' or submode == 'sample':
             if dataframes is None:
                 infile = self.infile
                 dataframes = read_dataframe(infile, chunksize=self.chunksize)
-            dataframe_results = pd.DataFrame()
 
-            if self.nr_core == 1:
+            if self.nr_cores == 1:
                 print1 = f"\nStart {submode} dataframe"
                 if self.chunksize:
                     print2 = f" in chunks with size {self.chunksize} rows"
@@ -119,48 +130,45 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
                     print2 = ""
                 print(print1 + print2)
 
-            # Checks that ChemInf operates in single core and that the dataframe is chunked
-            if self.nr_core == 1 and isinstance(dataframes, Chunks):
+            dataframe_results = pd.DataFrame()
+            if self.nr_cores == 1 and isinstance(dataframes, Chunks):
                 for i, chunk in enumerate(dataframes):
-                    if self.chunksize:
-                        print(f"\nWorking on chunk {i}\n-----------------------------------")
-                        try:
-                            if submode == 'balancing':
-                                dataframe_chunk = balancing_dataframe(chunk, percentage=self.percentage)
-                            elif submode == 'sample':
-                                dataframe_chunk = sample_dataframe(chunk, percentage=self.percentage)
-
-                            dataframe_results = pd.concat([dataframe_results, dataframe_chunk])
-
-                        except KeyError:
-                            pass
-
-            elif self.nr_core > 1 or isinstance(dataframes, pd.DataFrame):
-                try:
+                    print(f"\nWorking on chunk {i}\n-----------------------------------")
                     if submode == 'balancing':
-                        dataframe_results = balancing_dataframe(dataframes, percentage=self.percentage)
+                        dataframe_chunk = balancing_dataframe(chunk, percentage=self.percentage)
                     elif submode == 'sample':
-                        dataframe_results = sample_dataframe(dataframes, percentage=self.percentage)
+                        dataframe_chunk = sample_dataframe(chunk, percentage=self.percentage)
+                    else:
+                        raise ModeError(self.mode, submode)
 
-                except KeyError:
-                    pass
+                    dataframe_results = pd.concat([dataframe_results, dataframe_chunk])
 
+            elif (self.nr_cores > 1) or isinstance(dataframes, pd.DataFrame):
+                if submode == 'balancing':
+                    dataframe_results = balancing_dataframe(dataframes, percentage=self.percentage)
+                elif submode == 'sample':
+                    dataframe_results = sample_dataframe(dataframes, percentage=self.percentage)
+                else:
+                    raise ModeError(self.mode, submode)
             else:
                 raise ValueError("Unrecognized instance of 'dataframes'")
 
-            print("\nShuffles the dataset")
-            return shuffle_dataframe(dataframe_results)
+            if not dataframe_results.empty:
+                return shuffle_dataframe(dataframe_results)
+            else:
+                return dataframe_results
+
         else:
             raise ModeError(self.mode, submode)
 
     def split(self, dataframe=None, index=None):
-        return self._cut('split', dataframe, index)
+        return self._split_or_trim('split', dataframe, index)
 
     def trim(self, dataframe=None, index=None):
-        return self._cut('split', dataframe, index)
+        return self._split_or_trim('trim', dataframe, index)
 
-    def _cut(self, submode, dataframe=None, index=None):
-        if submode != 'balancing' and submode != 'sample':
+    def _split_or_trim(self, submode, dataframe=None, index=None):
+        if submode == 'split' or submode != 'trim':
             if dataframe is None:
                 dataframe = read_dataframe(self.infile, shuffle=self.shuffle)
 
@@ -187,7 +195,7 @@ class PreProcNormal(ChemInfPreProc):
         self.submode = controller.args.preproc_mode
 
     def run(self):
-        if self.nr_core > 1:
+        if self.nr_cores > 1:
             if self.submode in MULTICORE_SUPPORT:
                 self._multicore(self.submode)
             else:
@@ -216,10 +224,7 @@ class PreProcAuto(ChemInfPreProc):
         else:
             dataframe = None
 
-        if self.auto_save_preproc:
-            data = self._run_auto_mode('split', dataframe)
-        else:
-            data = self._run_auto_mode('split', dataframe, save=False)
+        data = self._run_auto_mode('split', dataframe, save=self.auto_save_preproc)
         return data
 
     def _run_auto_mode(self, submode, dataframe=None, save=True):
@@ -247,16 +252,19 @@ class PreProcAuto(ChemInfPreProc):
                 self.percentage = 1
             file_path = self._make_auto_outfile(submode)
             
-            if self.nr_core == 1:
+            if self.nr_cores == 1:
                 dataframe_data = self._single_core(submode, dataframe, outfile=file_path, save=save)
-            elif self.nr_core > 1:
+            elif self.nr_cores > 1:
                 dataframe_data = self._multicore(submode, dataframe, outfile=file_path, save=save)
             else:
-                error_message = f"Unsupported value for --nr_core: {self.nr_core}"
+                error_message = f"Unsupported value for --nr_cores: {self.nr_cores}"
                 raise ValueError(error_message)
             
             self.percentage = None
             return dataframe_data
+
+        else:
+            raise ModeError(self.mode, submode)
 
     def _make_auto_outfile(self, suffix, file=None):
         if file is None:
@@ -283,7 +291,10 @@ def balancing_dataframe(dataframe, percentage=1):
                                               n_samples=nr_samples,
                                               random_state=randrange(100, 999))
 
-    return pd.concat([dataframe_class0_balancing, dataframe_class1_sampled])
+        return pd.concat([dataframe_class0_balancing, dataframe_class1_sampled])
+
+    else:
+        return pd.DataFrame()
 
 
 def sample_dataframe(dataframe, percentage=1):

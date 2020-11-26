@@ -13,7 +13,7 @@ SUBMODES = ['preproc_mode', 'postproc_mode']
 ALL_MODES = MODEL_MODES + DATA_MODES + AUTO_MODES + SUBMODES
 
 OCCASIONAL_FLAGS = ['outfile', 'outfile2', 'classifier', 'models_dir', 'percentage', 'shuffle', 'significance',
-                    'name', 'override_config', 'chunksize', 'nr_core']
+                    'name', 'override_config', 'chunksize', 'nr_cores']
 
 ALL_FLAGS = ['infile', 'name', 'override_config'] + OCCASIONAL_FLAGS
 
@@ -95,6 +95,7 @@ class ChemInfPref(object):
 
         parser_postproc_plot = parser_postproc_mode.add_parser('plot',
                                                                help="Choose a preprocessing submode to preform")
+
         all_parsers = [parser_auto, parser_build, parser_improve, parser_predict,
                        parser_validate, parser_preproc_balancing, parser_preproc_sample, parser_preproc_split,
                        parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]
@@ -112,16 +113,6 @@ class ChemInfPref(object):
                                    help="Specify the file containing the data. For postproc plot mode the infile could "
                                         "be combine with multiple infiles to add data to one plot")
 
-        date = datetime.now()
-        current_date = date.strftime("%d-%m-%Y")
-        for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate,
-                          parser_preproc_split, parser_preproc_balancing,
-                          parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]:
-            subparser.add_argument('-n', '--name',
-                                   default=current_date,
-                                   help="Name of the current project, to which all out_puts "
-                                        "will use as prefixes or in subdirectories with that name.")
-
         for subparser in [parser_predict, parser_validate, parser_preproc_balancing, parser_preproc_sample,
                           parser_preproc_split, parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]:
             subparser.add_argument('-o', '--outfile',
@@ -133,6 +124,16 @@ class ChemInfPref(object):
             subparser.add_argument('-o2', '--outfile2',
                                    default=None,
                                    help="Specify the second output file.")
+
+        date = datetime.now()
+        current_date = date.strftime("%d-%m-%Y")
+        for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate,
+                          parser_preproc_split, parser_preproc_balancing,
+                          parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]:
+            subparser.add_argument('-n', '--name',
+                                   default=current_date,
+                                   help="Name of the current project, to which all out_puts "
+                                        "will use as prefixes or in subdirectories with that name.")
 
         for subparser in [parser_build, parser_improve, parser_predict, parser_validate]:
             subparser.add_argument('-md', '--models_dir',
@@ -175,7 +176,7 @@ class ChemInfPref(object):
 
         for subparser in [parser_auto, parser_preproc_balancing, parser_preproc_sample, parser_preproc_split,
                           parser_preproc_trim]:
-            subparser.add_argument('-nc', '--nr_core',
+            subparser.add_argument('-nc', '--nr_cores',
                                    default=1,
                                    type=int,
                                    help="Specify the amount of cores should be used.")
@@ -184,11 +185,11 @@ class ChemInfPref(object):
 
         if hasattr(args, 'preproc_mode'):
             if (args.preproc_mode == 'balancing' or args.preproc_mode == 'sample')\
-                    and (args.nr_core and not args.chunksize):
+                    and (args.nr_cores and not args.chunksize):
                 parser.error("Multicore has to be executed with chunking in preproc mode.")
 
             if (args.preproc_mode == 'split' or args.preproc_mode == 'trim') \
-                    and (args.num_core or args.chunksize):
+                    and (args.nr_cores or args.chunksize):
                 parser.error(f"Preproc {args.preproc_mode} be can't executed in multicore submode or with chunking.")
 
         return args
@@ -217,11 +218,15 @@ class ChemInfConfig(object):
                 return
 
             try:
-                attr_pos = 'classifier'
-                old_value = getattr(self.classifier, key)
-            except AttributeError:
                 attr_pos = 'execute'
                 old_value = getattr(self.execute, key)
+            except AttributeError:
+                if key in MODEL_MODES or key in ALL_MODES:
+                    attr_pos = 'classifier'
+                    old_value = getattr(self.classifier, key)
+                else:
+                    return
+
             value_type = old_value.__class__.__name__
 
             if f"{value_type}" == 'bool':
