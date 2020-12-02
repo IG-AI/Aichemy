@@ -402,3 +402,23 @@ class MutuallyExclusiveError(Exception):
             error_massage = f"Timer doesn't have attribute {item}"
             raise ValueError(error_massage)
 """
+
+
+def rmdir(path):
+    for _dir in os.listdir(path):
+        try:
+            rmdir(path + '/' + _dir)
+        except OSError:
+            os.remove(path + '/' + _dir)
+
+    os.rmdir(path)
+
+
+def block_prints(func):
+    def func_wrapper(*args, **kwargs):
+        sys.stdout = open(os.devnull, 'w')
+        value = func(*args, **kwargs)
+        sys.stdout = sys.__stdout__
+        return value
+
+    return func_wrapper

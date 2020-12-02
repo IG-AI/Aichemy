@@ -1,5 +1,4 @@
 import random
-import sys
 from abc import ABC
 from copy import copy
 
@@ -19,14 +18,13 @@ class ChemInfClassifier(object):
     @staticmethod
     def init_classifier(classifier_type, config):
         if classifier_type == 'rndfor':
-            architecture = ClassifierRF(smooth=config.smooth)
-
+            # architecture = ClassifierRF(smooth=config.smooth)
+            raise NotImplementedError("The random forest classifier aren't yet functional")
         elif classifier_type == 'nn':
             architecture = ClassifierNN(dim_in=config.dim_in,
                                         dim_hidden=config.dim_hidden,
                                         dim_out=config.dim_out,
                                         dropout=config.dropout)
-
         else:
             raise ValueError("Invalid classifier type")
 

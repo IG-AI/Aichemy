@@ -6,11 +6,11 @@ from abc import ABCMeta, abstractmethod
 
 from ..cheminf.classifiers import ChemInfClassifier
 from ..cheminf.preprocessing import PreProcAuto, split_dataframe
-from ..cheminf.utils import read_dataframe, split_array, get_size
+from ..cheminf.utils import read_dataframe, split_array, get_size, UnsupportedClassifierError
 
 
 class ChemInfModel(object, metaclass=ABCMeta):
-    def __init__(self, controller, model_type):
+    def __init__(self, model_type, controller):
         if controller.args.mode == 'auto':
             self.auto_save_preproc = controller.config.execute.auto_save_preproc
             preproc = PreProcAuto(controller)
@@ -26,6 +26,16 @@ class ChemInfModel(object, metaclass=ABCMeta):
         self.name = controller.args.name
         self.models_dir = controller.args.models_dir
         self.classifier = ChemInfClassifier(self.type, self.config)
+
+    @classmethod
+    def initialize(cls, controller):
+        if controller.args.classifier == 'rndfor':
+            model = ModelRNDFOR(controller)
+        elif controller.args.classifier == 'nn':
+            model = ModelNN(controller)
+        else:
+            raise UnsupportedClassifierError(controller.args.classifier)
+        return model
 
     @abstractmethod
     def build(self):
@@ -124,10 +134,10 @@ class ChemInfModel(object, metaclass=ABCMeta):
 
 # Todo: Make it work in current framework, with dataframes
 class ModelRNDFOR(ChemInfModel):
-    def __init__(self, database):
-        super(ModelRNDFOR, self).__init__(database, 'rndfor')
-        if database.args.outfile2:
-            self.outfile_train = database.args.outfile2
+    def __init__(self, controller):
+        super(ModelRNDFOR, self).__init__('rndfor', controller)
+        if controller.args.outfile2:
+            self.outfile_train = controller.args.outfile2
 
     def build(self, models=None):
         """Trains NR_MODELS models and saves them as compressed files
@@ -386,8 +396,8 @@ class ModelRNDFOR(ChemInfModel):
 
 
 class ModelNN(ChemInfModel):
-    def __init__(self, database):
-        super(ModelNN, self).__init__(database, 'nn')
+    def __init__(self, controller):
+        super(ModelNN, self).__init__('nn', controller)
         self.optimizer = None
 
     def _set_optimizer(self):

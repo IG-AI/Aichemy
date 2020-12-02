@@ -17,7 +17,7 @@ __contributors__ = "This frameworks random forest classifier is based on the che
 06/07-2020, LS: 
     Implementation of k-fold cross validation.
 28/09-2020 - 30/10-2020, DA: 
-    Completely revamped the code with a object originated approached, extended the available classifiers with a 
+    Completely revamped the code with a object originated approached, extended the available classifier_type with a 
     dynamic neural network, added data utils, completely changed to how the user interact with the program to make it
     more user-friendly and added a setup script, a conda env file and pip env requirements file for easier installation 
     of the program with more options for the user.    

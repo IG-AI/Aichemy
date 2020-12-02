@@ -21,6 +21,14 @@ class ChemInfPostProc(object, metaclass=ABCMeta):
         else:
             self.significance = None
 
+    @classmethod
+    def initialize(cls, controller):
+        if controller.args.mode in controller.auto_modes:
+            postproc = PostProcAuto(controller)
+        else:
+            postproc = PostProcNormal(controller)
+        return postproc
+
     @abstractmethod
     def run(self):
         pass
@@ -50,6 +58,8 @@ class ChemInfPostProc(object, metaclass=ABCMeta):
 
         # create scatter plots
         calibration_plots(library, header, outfile)
+        if self.plot_del_sum:
+            [os.remove(sum_file) for sum_file in infiles]
 
     def get(self, key):
         return getattr(self, key)
@@ -66,7 +76,7 @@ class PostProcNormal(ChemInfPostProc):
         if self.mode == 'summary':
             self.make_summary(self.infiles, self.outfile)
         elif self.mode == 'plot':
-            self.make_plot(self.infiles, self.outfile, self.plot_del_sum)
+            self.make_plot(self.infiles, self.outfile)
         else:
             raise ModeError("postproc", self.mode)
 
@@ -97,16 +107,14 @@ class PostProcAuto(ChemInfPostProc):
         for file_list in files:
             infile = file_list[0]
             outfile = file_list[1]
-            print(infile)
-            print(outfile)
             if self.auto_plus_plot:
                 self.make_summary(infile, outfile)
+                if not self.auto_plus_sum:
+                    self.plot_del_sum  = True
                 infile = outfile
                 outfile_name, outfile_extension = os.path.splitext(outfile)
                 output_plot = outfile_name.replace("_summary", '')
                 self.make_plot([infile], output_plot)
-                if not self.auto_plus_sum:
-                    os.remove(outfile)
             elif self.auto_plus_sum:
                 self.make_summary(infile, outfile)
             else:
@@ -300,10 +308,42 @@ def calibration_plots(library, header, prefix):
         x_arr = np.asarray([x_masked for _ in settings])
         y_arr = np.asarray(y_arr)
 
-        _calibration_plots(x_arr, y_arr, prefix, factor, settings)
+        _calibration_plots(x_arr, y_arr, prefix, factor)
 
 
-def _calibration_plots(x_arr, y_arr, prefix, factor, settings):
+def _calibration_plots(x_arr, y_arr, prefix, factor):
+    """Writing out a plot with a name based on the prefix name
+    and the factor.
+    """
+    # Create color palette
+    base_color = sns.color_palette("YlOrRd")
+    fig, ax = plt.subplots()
+    plt.style.use('seaborn-whitegrid')
+
+    if 'error_rate' in factor:
+        plt.plot([0, 1], [0, 1], '--', c='gray')
+
+    y_mean = np.mean(y_arr, axis=0)
+    y_std = np.std(y_arr, axis=0)
+    plt.plot(x_arr, y_mean, linewidth=2, color=base_color)
+    plt.fill_between(range(len(y_mean)), (y_mean - y_std), (y_mean + y_std), color=base_color, alpha=.1)
+
+    plt.ylabel(factor, fontweight='bold')
+    plt.xlabel('significance', fontweight='bold')
+    plt.ylim((0, 1))
+    plt.xlim((0, 1))
+
+    # add legend
+    handles, labels = ax.get_legend_handles_labels()
+    filenames = [os.path.split(label)[1] for label in labels]
+    lgd = ax.legend(handles, filenames, loc='lower center', frameon=True,
+                    ncol=1, bbox_to_anchor=(0.5, -0.4), fontsize=12)
+
+    plt.savefig("%s.%s.png" % (prefix, factor), dpi=300, bbox_inches="tight")
+    plt.clf()
+
+
+def _calibration_plots2(x_arr, y_arr, prefix, factor, settings):
     """Writing out a plot with a name based on the prefix name
     and the factor.
     """

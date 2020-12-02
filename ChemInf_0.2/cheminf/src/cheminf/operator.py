@@ -1,5 +1,5 @@
 from ..cheminf.utils import UnsupportedClassifierError, ModeError, Timer
-from ..cheminf.controller import ChemInfController
+from ..cheminf.controller import ChemInfController, MODEL_MODES, AUTO_MODES
 
 
 class ChemInfTimer(Timer):
@@ -9,9 +9,12 @@ class ChemInfTimer(Timer):
 
 
 class ChemInfOperator(object):
-    def __init__(self):
-        self.timer = ChemInfTimer()
-        self.controller = ChemInfController()
+    def __init__(self, controller=None):
+        if controller is None:
+            self.timer = ChemInfTimer()
+            self.controller = ChemInfController()
+        else:
+            self.controller = controller
         self.mode = self.controller.args.mode
         self.classifier = self.controller.args.classifier
 
@@ -32,7 +35,7 @@ class ChemInfOperator(object):
             else:
                 self.postproc = None
 
-        if self.mode in self.controller.model_modes or self.mode in self.controller.auto_modes:
+        if self.mode in MODEL_MODES or self.mode in self.controller.auto_modes:
             if self.controller.args.classifier == 'all':
                 models = self.init_model(self.controller)
                 self.rndfor_model = models[0]
@@ -51,25 +54,28 @@ class ChemInfOperator(object):
                     raise UnsupportedClassifierError(self.controller.args.classifier)
 
     def __del__(self):
-        try:
+        if hasattr(self, 'timer'):
             self.timer.stop()
-        except AttributeError:
-            pass
+
+        if hasattr(self, 'controller'):
+            self.controller.delete()
+            if not self.controller.debugging:
+                del self
 
     @staticmethod
     def init_model(controller):
         if controller.args.classifier == 'all':
-            from ..cheminf.models import ModelRNDFOR
-            from ..cheminf.models import ModelNN
+            from ..cheminf.model import ModelRNDFOR
+            from ..cheminf.model import ModelNN
             models = [ModelRNDFOR(controller), ModelNN(controller)]
             return models
 
         elif controller.args.classifier == 'rndfor':
-            from ..cheminf.models import ModelRNDFOR
+            from ..cheminf.model import ModelRNDFOR
             model = ModelRNDFOR(controller)
 
         elif controller.args.classifier == 'nn':
-            from ..cheminf.models import ModelNN
+            from ..cheminf.model import ModelNN
             model = ModelNN(controller)
 
         else:
@@ -98,19 +104,19 @@ class ChemInfOperator(object):
         else:
             classifiers = [None]
 
-        if self.mode in self.controller.auto_modes:
+        if self.mode in AUTO_MODES:
             for classifier in classifiers:
                 model = self.get_model(classifier)
                 model.build()
                 model.predict()
 
-        if self.mode == 'postproc' or self.mode in self.controller.auto_modes:
+        if self.mode == 'postproc' or self.mode in AUTO_MODES:
             self.postproc.run()
 
         elif self.mode == 'preproc':
             self.preproc.run()
 
-        elif self.mode in self.controller.model_modes:
+        elif self.mode in MODEL_MODES:
             for classifier in classifiers:
                 model = self.get_model(classifier)
                 model_activate = model.get(self.mode)
@@ -119,6 +125,6 @@ class ChemInfOperator(object):
             raise ModeError('operator', self.mode)
 
 
-def run_operator():
-    cheminf = ChemInfOperator()
+def run_operator(controller=None):
+    cheminf = ChemInfOperator(controller)
     cheminf.run()

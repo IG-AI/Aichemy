@@ -28,6 +28,14 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
         self.outfile2 = controller.args.outfile2
         self.src_dir = controller.src_dir
 
+    @classmethod
+    def initialize(cls, controller):
+        if controller.args.mode in controller.auto_modes:
+            preproc = PreProcAuto(controller)
+        else:
+            preproc = PreProcNormal(controller)
+        return preproc
+
     @abstractmethod
     def run(self):
         pass
@@ -283,7 +291,9 @@ def balancing_dataframe(dataframe, percentage=1):
                                               n_samples=nr_samples,
                                               random_state=randrange(100, 999))
 
-    return pd.concat([dataframe_class0_balancing, dataframe_class1_sampled])
+        return pd.concat([dataframe_class0_balancing, dataframe_class1_sampled])
+    else:
+        return []
 
 
 def sample_dataframe(dataframe, percentage=1):
