@@ -297,6 +297,7 @@ class ConfigExec(object):
             self.auto_plus_plot = boolean(config['auto']['auto_plus_plot'])
             self.train_test_ratio = float(config['auto']['train_test_ratio'])
             self.sample_ratio = float(config['auto']['sample_ratio'])
+            self.balancing_ratio = float(config['auto']['balancing_ratio'])
 
         if operator_mode == 'postproc' or operator_mode == 'auto':
             self.error_level = int(config['postproc']['error_level'])
