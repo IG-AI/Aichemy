@@ -201,6 +201,7 @@ class PreProcAuto(ChemInfPreProc):
         super(PreProcAuto, self).__init__(controller)
         self.train_test_ratio = controller.config.execute.train_test_ratio
         self.sample_ratio = controller.config.execute.sample_ratio
+        self.balancing_ratio = controller.config.execute.balancing_ratio
         self.auto_save_preproc = controller.config.execute.auto_save_preproc
         self.auto_plus_balancing = (self.mode == 'auto' and controller.config.execute.auto_plus_balancing)
         self.auto_plus_sample = (self.mode == 'auto' and controller.config.execute.auto_plus_sample)
@@ -244,7 +245,7 @@ class PreProcAuto(ChemInfPreProc):
             if submode == 'sample':
                 self.percentage = self.sample_ratio
             elif submode == 'balancing':
-                self.percentage = 1
+                self.percentage = self.balancing_ratio
             file_path = self._make_auto_outfile(submode)
             
             if self.nr_core == 1:
