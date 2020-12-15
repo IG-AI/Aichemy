@@ -1,0 +1,16 @@
+# Ignore hidden directories and files
+.*
+!/.gitignore
+
+# Ignore files
+*.png
+*.csv
+*.z
+*.model
+*.scale
+*smi
+
+# Ignore directories
+[0-9]*/
+**/data
+**/logs
