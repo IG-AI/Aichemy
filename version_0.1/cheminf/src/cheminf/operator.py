@@ -81,7 +81,8 @@ class ChemInfOperator(object):
         if classifier is None:
             classifier = self.classifier
 
-        return getattr(self, f"{classifier}_model")
+        model_string = f"{classifier}_model"
+        return getattr(self, model_string)
 
     def get_utils(self, utils=None):
         if utils is None:

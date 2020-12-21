@@ -1,6 +1,7 @@
 import configparser
 import argparse
 import os
+import re
 from datetime import datetime
 
 from ..cheminf.classifiers import CLASSIFIER_TYPES
@@ -12,9 +13,8 @@ AUTO_MODES = ['auto']
 SUBMODES = ['preproc_mode', 'postproc_mode']
 ALL_MODES = MODEL_MODES + DATA_MODES + AUTO_MODES + SUBMODES
 
-OCCASIONAL_FLAGS = ['outfile', 'outfile2', 'classifier', 'models_dir', 'percentage', 'shuffle', 'significance',
+OCCASIONAL_FLAGS = ['outfile', 'outfile2', 'classifier', 'models_dir', 'percentage', 'shuffle', 'error_bars', 'significance',
                     'name', 'override_config', 'chunksize', 'nr_cores']
-
 ALL_FLAGS = ['infile', 'name', 'override_config'] + OCCASIONAL_FLAGS
 
 PYTORCH_OPTIMIZERS = ['Adam', 'AdamW', 'Adamax', 'RMSprop', 'SGD', 'Adagrad', 'Adadelta']
@@ -90,17 +90,22 @@ class ChemInfPref(object):
         parser_postproc_mode = parser_postproc.add_subparsers(help="Choose a preprocessing submode to preform",
                                                               dest='postproc_mode')
 
+        parser_postproc_structure_check = parser_postproc_mode.add_parser('structure-check',
+                                                               help="Check the structure of a project directory")
+
         parser_postproc_summary = parser_postproc_mode.add_parser('summary',
-                                                                  help="Choose a preprocessing submode to preform")
+                                                                  help="Creates a summary from a prediction file")
 
         parser_postproc_plot = parser_postproc_mode.add_parser('plot',
-                                                               help="Choose a preprocessing submode to preform")
+                                                               help="Creates plots from a summary file")
 
-        all_parsers = [parser_auto, parser_build, parser_improve, parser_predict,
-                       parser_validate, parser_preproc_balancing, parser_preproc_sample, parser_preproc_split,
-                       parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]
+        all_parsers = [parser_auto, parser_build, parser_improve, parser_predict, parser_validate,
+                       parser_preproc_balancing, parser_preproc_sample, parser_preproc_split,
+                       parser_preproc_trim, parser_postproc_summary, parser_postproc_plot,
+                       parser_postproc_structure_check]
 
-        for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate]:
+        for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate,
+                          parser_postproc_structure_check]:
             subparser.add_argument('-cl', '--classifier',
                                    default='nn',
                                    choices=['rndfor', 'nn', 'all'],
@@ -127,9 +132,7 @@ class ChemInfPref(object):
 
         date = datetime.now()
         current_date = date.strftime("%d-%m-%Y")
-        for subparser in [parser_auto, parser_build, parser_improve, parser_predict, parser_validate,
-                          parser_preproc_split, parser_preproc_balancing,
-                          parser_preproc_trim, parser_postproc_summary, parser_postproc_plot]:
+        for subparser in all_parsers:
             subparser.add_argument('-n', '--name',
                                    default=current_date,
                                    help="Name of the current project, to which all out_puts "
@@ -154,6 +157,13 @@ class ChemInfPref(object):
                                    default=False,
                                    action='store_true',
                                    help="Specify that the data should be shuffled")
+
+        for subparser in [parser_postproc_plot]:
+            subparser.add_argument('-eb', '--error_bars',
+                                   default=False,
+                                   action='store_true',
+                                   help="Specify if the combine plots should be produced with multi-graphs or with "
+                                        "error bars")
 
         for subparser in [parser_postproc_summary]:
             subparser.add_argument('-sg', '--significance',
@@ -221,11 +231,12 @@ class ChemInfConfig(object):
                 attr_pos = 'execute'
                 old_value = getattr(self.execute, key)
             except AttributeError:
-                if key in MODEL_MODES or key in ALL_MODES:
+                try:
                     attr_pos = 'classifier'
                     old_value = getattr(self.classifier, key)
-                else:
-                    return
+                except AttributeError:
+                    print(f"Config {key} can't be changed because current run doesn't use that configuration")
+                    return 
 
             value_type = old_value.__class__.__name__
 
@@ -296,12 +307,14 @@ class ConfigExec(object):
             self.auto_plus_sum = boolean(config['auto']['auto_plus_sum'])
             self.auto_plus_plot = boolean(config['auto']['auto_plus_plot'])
             self.train_test_ratio = float(config['auto']['train_test_ratio'])
-            self.sample_ratio = float(config['auto']['sample_ratio'])
-            self.balancing_ratio = float(config['auto']['balancing_ratio'])
 
         if operator_mode == 'postproc' or operator_mode == 'auto':
             self.error_level = int(config['postproc']['error_level'])
             self.plot_del_sum = boolean(config['postproc']['plot_del_sum'])
+
+        if operator_mode == 'preproc' or operator_mode == 'auto':
+            self.sample_ratio = float(config['preproc']['sample_ratio'])
+            self.balancing_ratio = float(config['preproc']['balancing_ratio'])
 
 
 class ChemInfController(ChemInfPref):
@@ -312,17 +325,15 @@ class ChemInfController(ChemInfPref):
     scr = None
     project_dir = None
     predictions_dir = None
-    name = None
     args = None
     config = None
-    initiated = False
+    session = None
 
     def __new__(cls, *args, **kwargs):
-        if not cls.initiated:
-            cls.initiated = True
-            return super().__new__(cls)
-        else:
-            pass
+        if cls.session is None:
+            cls.session = super().__new__(cls)
+
+        return cls.session
 
     def __init__(self):
         file_dir = os.path.dirname(os.path.abspath(__file__))
@@ -331,14 +342,14 @@ class ChemInfController(ChemInfPref):
 
         config_files = [f"{self.src_dir}/config/classifiers.ini", f"{self.src_dir}/config/execute.ini"]
         super(ChemInfController, self).__init__(config_files)
-        self.name = self.args.name
+
         self.update_infiles()
         self.add_project_dir()
 
         if self.args.mode in self.model_modes or self.args.mode in self.auto_modes:
             self.add_model_path()
 
-        if self.args.mode in MODEL_MODES or self.args.mode == 'auto':
+        if self.args.mode in self.model_modes or self.args.mode == 'auto':
             self.add_predict_path()
 
         if self.args.mode == 'preproc' or self.args.mode == 'postproc' or self.args.mode == 'auto':
@@ -393,40 +404,43 @@ class ChemInfController(ChemInfPref):
             if hasattr(self.args, 'infile'):
                 if self.args.mode == 'preproc':
                     if self.args.preproc_mode == 'trim':
-                        self.args.outfile = f"{self.src_dir}/data/{infile_name}_trimmed{infile_extension}"
+                        self.args.outfile = f"{self.project_dir}/{infile_name}_trimmed{infile_extension}"
 
                     elif self.args.preproc_mode == 'balancing':
-                        self.args.outfile = f"{self.src_dir}/data/{infile_name}_balanced{infile_extension}"
+                        self.args.outfile = f"{self.project_dir}/{infile_name}_balanced{infile_extension}"
 
                     elif self.args.preproc_mode == 'sample':
-                        self.args.outfile = f"{self.src_dir}/data/{infile_name}_sampled{infile_extension}"
+                        self.args.outfile = f"{self.project_dir}/{infile_name}_sampled{infile_extension}"
 
                     elif self.args.preproc_mode == 'split':
                         if self.args.outfile is None:
-                            self.args.outfile = f"{self.src_dir}/data/{infile_name}_train{infile_extension}"
+                            self.args.outfile = f"{self.project_dir}/{infile_name}_train{infile_extension}"
                         if self.args.outfile2 is None:
-                            self.args.outfile2 = f"{self.src_dir}/data/{infile_name}_test{infile_extension}"
+                            self.args.outfile2 = f"{self.project_dir}/{infile_name}_test{infile_extension}"
                     else:
                         ModeError(self.args.mode, self.args.preproc_mode)
 
                 elif self.args.postproc_mode == 'summary':
                     self.args.outfile = f"{self.project_dir}/predictions/{infile_name}_summary{infile_extension}"
 
-            elif self.args.postproc_mode == 'plot':
-                infile_name = infile_name.replace("_summary", '')
-                print(infile_name)
-                self.args.outfile = f"{self.project_dir}/predictions/{infile_name}"
-
             else:
                 pass
 
     def add_project_dir(self):
-        self.project_dir = f"{self.src_dir}/data/{self.name}"
+
+        project_path, project_name = os.path.split(self.args.name)
+        if not project_path:
+            self.project_dir = f"{self.src_dir}/data/{project_name}"
+        else:
+            self.project_dir = f"{self.src_dir}/data/{self.args.name}"
         try:
-            os.mkdir(self.project_dir)
-            print(f"Created the project directory: {self.project_dir}")
-        except FileExistsError:
+            os.makedirs(self.project_dir)
+        except OSError:
             pass
+        else:
+            print(f"Created the project directory: {self.project_dir}")
+        finally:
+            self.args.name = project_name
 
     def add_model_path(self):
         if not self.args.models_dir:
@@ -443,7 +457,7 @@ class ChemInfController(ChemInfPref):
             _pred_files = {}
             if self.args.outfile is None:
                 for i, _classifier in enumerate(classifier_types):
-                    path = f"{self.predictions_dir}/{self.name}_{_classifier}_predictions.csv"
+                    path = f"{self.predictions_dir}/{self.args.name}_{_classifier}_predictions.csv"
                     _pred_files[_classifier] = path
             else:
                 outfile_path, outfile = os.path.split(self.args.outfile)

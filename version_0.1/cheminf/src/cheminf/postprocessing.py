@@ -1,10 +1,12 @@
 import os
-import sys
+import re
 
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from matplotlib import font_manager
+from scipy.stats import sem
 from abc import ABCMeta, abstractmethod
 
 from ..cheminf.utils import ModeError
@@ -16,6 +18,7 @@ class ChemInfPostProc(object, metaclass=ABCMeta):
         self.classifier = controller.args.classifier
         self.error_level = controller.config.execute.error_level
         self.plot_del_sum = controller.config.execute.plot_del_sum
+        self.error_bars = controller.args.error_bars
         if controller.args.significance:
             self.significance = controller.args.significance
         else:
@@ -49,7 +52,7 @@ class ChemInfPostProc(object, metaclass=ABCMeta):
         assert len(headers) == 1, "Headers in input files have different formats!"
 
         # create scatter plots
-        calibration_plots(library, header, outfile)
+        calibration_plots(library, header, self.name, outfile, error_bars=self.error_bars)
 
     def get(self, key):
         return getattr(self, key)
@@ -64,9 +67,20 @@ class PostProcNormal(ChemInfPostProc):
 
     def run(self):
         if self.mode == 'summary':
-            self.make_summary(self.infiles, self.outfile)
+            for infile in self.infiles:
+                infile_name, infile_extension = os.path.splitext(infile)
+                outfile = f"{infile_name}_summary{infile_extension}"
+                self.make_summary(infile, outfile)
         elif self.mode == 'plot':
-            self.make_plot(self.infiles, self.outfile, self.plot_del_sum)
+            infile_path, infile_full = os.path.split(self.infiles[0])
+            infile_name, infile_type = os.path.splitext(infile_full)
+            if self.outfile is None:
+                outfile = infile_name.replace("_summary", '')
+            else:
+                infile_file = re.sub(r'(.+)_sample.(.+)_summary', r'\g<1>' + r'\g<2>', infile_name)
+                outfile = f"{self.outfile}/{infile_file}"
+
+            self.make_plot(self.infiles, outfile)
         else:
             raise ModeError("postproc", self.mode)
 
@@ -97,8 +111,6 @@ class PostProcAuto(ChemInfPostProc):
         for file_list in files:
             infile = file_list[0]
             outfile = file_list[1]
-            print(infile)
-            print(outfile)
             if self.auto_plus_plot:
                 self.make_summary(infile, outfile)
                 infile = outfile
@@ -139,7 +151,7 @@ def write_pred_summary_file(outfile, summary_array, significance_list):
             # (false_pos + false_neg + null_set) / total_samples
             error_rate = (summary_array[i, 1] + summary_array[i, 3] +
                           summary_array[i, 6] + summary_array[i, 7]) / \
-                          total_samples
+                         total_samples
 
             # (true_pos + both_class1) / total_positives.
             error_rate_class1 = (summary_array[i, 3] +
@@ -279,7 +291,7 @@ def read_pred_summary(infile):
     return header, data
 
 
-def calibration_plots(library, header, prefix):
+def calibration_plots(library, header, title, prefix, error_bars=False):
     """Calculating summary statistics and plotting them for a set of
     error levels.
     """
@@ -292,7 +304,6 @@ def calibration_plots(library, header, prefix):
         y_arr = []
         for setting in settings:
             y = library[setting][:, i]
-            # print(y)
             y_masked = np.ma.masked_invalid(y)
             x_masked = np.ma.array(x, mask=y_masked.mask)
             y_arr.append(y_masked)
@@ -300,35 +311,92 @@ def calibration_plots(library, header, prefix):
         x_arr = np.asarray([x_masked for _ in settings])
         y_arr = np.asarray(y_arr)
 
-        _calibration_plots(x_arr, y_arr, prefix, factor, settings)
+        _calibration_plots(x_arr, y_arr, title, prefix, factor, settings, error_bars=error_bars)
 
 
-def _calibration_plots(x_arr, y_arr, prefix, factor, settings):
+def _calibration_plots(x_arr, y_arr, title, prefix, factor, settings, error_bars):
     """Writing out a plot with a name based on the prefix name
     and the factor.
     """
-    # Create color palette
-    base_colors = sns.color_palette("YlOrRd", len(settings))
+    n_plots = len(settings)
+    plt.style.use('seaborn-dark-palette')
+    color_palette = sns.color_palette("winter_r", n_plots)
+    sns.set_palette(color_palette, n_plots)
+    plt.rcParams['grid.color'] = 'blue'
+    plt.rcParams['grid.linestyle'] = ':'
+    plt.rcParams['grid.linewidth'] = 1
+    plt.rcParams["font.family"] = "DejaVu Sans"
+
     fig, ax = plt.subplots()
-    plt.style.use('seaborn-whitegrid')
-
+    ax.grid()
+    ax.patch.set_facecolor('lightblue')
+    ax.patch.set_alpha(0.25)
     if 'error_rate' in factor:
-        plt.plot([0, 1], [0, 1], '--', c='gray')
+        ax.plot([0, 1], [0, 1], '--', color='blue')
 
-    for idx, setting in enumerate(settings):
-        plt.plot(x_arr[idx], y_arr[idx], linewidth=2,
-                 color=base_colors[idx], label=setting)
+    if error_bars:
+        y_mean = np.mean(y_arr, axis=0)
+        x_mean = np.mean(x_arr, axis=0)
+        y_err = sem(y_arr, axis=0)
+        ax.plot(x_mean, y_mean, linewidth=2, label=settings[0])
+        ax.fill_between(x_mean, (y_mean - y_err), (y_mean + y_err), alpha=.50)
 
-    plt.ylabel(factor, fontweight='bold')
-    plt.xlabel('significance', fontweight='bold')
+        handles, label = ax.get_legend_handles_labels()
+        filenames = [" ".join(map(lambda string: string[0].upper() + string[1:],
+                                  re.sub(r'(.+)_sample.+', r'\g<1>' + f'_-_{str(len(settings))}_samples',
+                                         os.path.split(label[0])[1]).split('_')))]
+
+    else:
+        for idx, setting in enumerate(settings):
+            ax.plot(x_arr[idx], y_arr[idx], linewidth=2, label=setting)
+
+        handles, labels = ax.get_legend_handles_labels()
+        files = [os.path.split(label)[1] for label in labels]
+
+        # add legend
+        if len(files) > 1:
+            if contains_all_samples(files):
+                regex = re.compile(r'(.+_sample\d).+')
+            else:
+                regex = re.compile(r'(.+)_sample.+')
+            filenames = [" ".join(map(lambda string: string[0].upper() + string[1:],
+                                      re.sub(regex, r'\g<1>', name).
+                                      split('_')))
+                         for name in files]
+        else:
+            filenames = files
+
+    axbox = ax.get_position()
+    ax.set_position([axbox.x0, axbox.y0 + axbox.height * 0.1,
+                     axbox.width, axbox.height * 0.9])
+
+    lgd = ax.legend(handles, filenames, loc='upper center', ncol=1,
+                    bbox_to_anchor=(0.5, 0.05),
+                    bbox_transform=fig.transFigure, fontsize=7,
+                    shadow=True, fancybox=True, prop={"weight": "medium"})
+
+    label = " ".join(map(lambda string: string[0].upper() + string[1:], factor.split('_')))
+    title_label = re.sub(r'inv_nn_(.+)', r'\g<1>', title)
+    title = " ".join(map(lambda string: string[0].upper() + string[1:], title_label.split('_')))
+    fig.suptitle('ChemInf', fontweight='bold', fontsize=15, color='blue')
+    plt.title(title, fontweight='semibold', fontsize=10)
+    plt.ylabel(label, fontweight='semibold', fontsize=10)
+    plt.xlabel('Significance', fontweight='semibold', fontsize=10)
     plt.ylim((0, 1))
     plt.xlim((0, 1))
 
-    # add legend
-    handles, labels = ax.get_legend_handles_labels()
-    filenames = [os.path.split(label)[1] for label in labels]
-    lgd = ax.legend(handles, filenames, loc='lower center', frameon=True,
-                    ncol=1, bbox_to_anchor=(0.5, -0.4), fontsize=12)
-
     plt.savefig("%s.%s.png" % (prefix, factor), dpi=300, bbox_inches="tight")
     plt.clf()
+
+
+def contains_all_samples(string_list):
+    sample_strings = ["sample1", "sample2", "sample3", "sample4", "sample5"]
+    for file in string_list:
+        for sample in sample_strings:
+            if sample in file:
+                sample_strings.remove(sample)
+
+    if not sample_strings:
+        return True
+    else:
+        return False

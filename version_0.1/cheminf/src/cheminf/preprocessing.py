@@ -12,6 +12,7 @@ from ..cheminf.utils import read_dataframe, save_dataframe, shuffle_dataframe, M
 
 MULTICORE_SUPPORT = ['balancing', 'sample', 'auto']
 
+# Todo: Make the provided outfile will be used correctly
 class ChemInfPreProc(object, metaclass=ABCMeta):
     def __init__(self, controller):
         self.shuffle = controller.args.shuffle
