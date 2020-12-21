@@ -1,9 +1,9 @@
 [tool.poetry]
-name = "cheminf"
-version = "0.1.0"
+name = "aichemy"
+version = "0.1.1"
 description = "A conformal prediction classifier for immensely large molecular libraries"
 authors = ["Daniel Ågstrand <d.e.agstrand@gmail.com>"]
-repository = "https://github.com/IG-AI/ChemInf"
+repository = "https://github.com/IG-AI/AIchemy"
 license = "Attribution-NonCommercial-NoDerivatives 4.0 International"
 readme = "README.md"
 keywords = [
@@ -17,7 +17,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Medical Science Apps."
 ]
 packages = [
-    { include = "cheminf", from = "src" },
+    { include = "aichemy" },
 ]
 include = [
     "README.md",
@@ -36,6 +36,7 @@ skorch = "^0.9.0"
 lz4 = "^3.1.1"
 icu = "^0.0.1"
 mkl = "^2021.1.1"
+poetry = "^1.1.4"
 nonconformist = {git = "https://github.com/donlnz/nonconformist"}
 torchtools = {git = "https://github.com/pabloppp/pytorch-tools"}
 

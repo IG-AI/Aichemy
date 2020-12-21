@@ -4,12 +4,12 @@ import cloudpickle
 import numpy as np
 from abc import ABCMeta, abstractmethod
 
-from ..cheminf.classifiers import ChemInfClassifier
-from ..cheminf.preprocessing import PreProcAuto, split_dataframe
-from ..cheminf.utils import read_dataframe, split_array, get_size
+from aichemy.classifiers import AIchemyClassifier
+from aichemy.preprocessing import PreProcAuto, split_dataframe
+from aichemy.utils import read_dataframe, split_array, get_size
 
 
-class ChemInfModel(object, metaclass=ABCMeta):
+class AIchemyModel(object, metaclass=ABCMeta):
     def __init__(self, controller, model_type):
         if controller.args.mode == 'auto':
             self.auto_save_preproc = controller.config.execute.auto_save_preproc
@@ -25,7 +25,7 @@ class ChemInfModel(object, metaclass=ABCMeta):
         self.config = controller.config.classifier
         self.name = controller.args.name
         self.models_dir = controller.args.models_dir
-        self.classifier = ChemInfClassifier(self.type, self.config)
+        self.classifier = AIchemyClassifier(self.type, self.config)
 
     @abstractmethod
     def build(self):
@@ -123,7 +123,7 @@ class ChemInfModel(object, metaclass=ABCMeta):
 
 
 # Todo: Make it work in current framework, with dataframes
-class ModelRNDFOR(ChemInfModel):
+class ModelRNDFOR(AIchemyModel):
     def __init__(self, database):
         super(ModelRNDFOR, self).__init__(database, 'rndfor')
         if database.args.outfile2:
@@ -134,7 +134,7 @@ class ModelRNDFOR(ChemInfModel):
         in the MODELS_PATH directory along with the calibration
         conformity scores.
         """
-        from ..cheminf.utils import shuffle_arrays_in_unison
+        from aichemy.utils import shuffle_arrays_in_unison
 
         nr_models = self.config.nr_models
         prop_train_ratio = self.config.prop_train_ratio
@@ -271,7 +271,7 @@ class ModelRNDFOR(ChemInfModel):
     def validate(self):
         """Cross validation using the K-fold method.
         """
-        from ..cheminf.utils import read_array, shuffle_arrays_in_unison
+        from aichemy.utils import read_array, shuffle_arrays_in_unison
 
         # Reading parameters
         nr_models = self.config.nr_models
@@ -385,13 +385,13 @@ class ModelRNDFOR(ChemInfModel):
             fout_train.close()
 
 
-class ModelNN(ChemInfModel):
+class ModelNN(AIchemyModel):
     def __init__(self, database):
         super(ModelNN, self).__init__(database, 'nn')
         self.optimizer = None
 
     def _set_optimizer(self):
-        from ..cheminf.controller import PYTORCH_OPTIMIZERS, TORCHTOOLS_OPTIMIZERS
+        from aichemy.controller import PYTORCH_OPTIMIZERS, TORCHTOOLS_OPTIMIZERS
 
         if self.config.optimizer in PYTORCH_OPTIMIZERS:
             exec(f"from torch.optim import {self.config.optimizer}")
@@ -409,7 +409,7 @@ class ModelNN(ChemInfModel):
         from skorch.dataset import Dataset
         from skorch.helper import predefined_split
         from torch import nn
-        from torch import FloatTensor, Tensor
+        from torch import FloatTensor
 
         from libs.nonconformist.base import ClassifierAdapter
         from libs.nonconformist.icp import IcpClassifier

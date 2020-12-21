@@ -1,33 +1,33 @@
-from ..cheminf.utils import UnsupportedClassifierError, ModeError, Timer
-from ..cheminf.controller import ChemInfController
+from aichemy.utils import UnsupportedClassifierError, ModeError, Timer
+from aichemy.controller import AIchemyController
 
 
-class ChemInfTimer(Timer):
+class AIchemyTimer(Timer):
     def __init__(self):
-        super(ChemInfTimer, self).__init__("ChemInf", verbose=1)
+        super(AIchemyTimer, self).__init__("AIchemy", verbose=1)
         self.start()
 
 
-class ChemInfOperator(object):
+class AIchemyOperator(object):
     def __init__(self):
-        self.timer = ChemInfTimer()
-        self.controller = ChemInfController()
+        self.timer = AIchemyTimer()
+        self.controller = AIchemyController()
         self.mode = self.controller.args.mode
         self.classifier = self.controller.args.classifier
 
         if self.mode == 'postproc':
-            from ..cheminf.postprocessing import PostProcNormal
+            from aichemy.postprocessing import PostProcNormal
             self.postproc = PostProcNormal(self.controller)
 
         elif self.mode == 'preproc':
-            from ..cheminf.preprocessing import PreProcNormal
+            from aichemy.preprocessing import PreProcNormal
             self.preproc = PreProcNormal(self.controller)
 
         elif self.mode == 'auto':
-            from ..cheminf.preprocessing import PreProcAuto
+            from aichemy.preprocessing import PreProcAuto
             self.preproc = PreProcAuto(self.controller)
             if self.controller.config.execute.auto_plus_sum or self.controller.config.execute.auto_plus_plot:
-                from ..cheminf.postprocessing import PostProcAuto
+                from aichemy.postprocessing import PostProcAuto
                 self.postproc = PostProcAuto(self.controller)
             else:
                 self.postproc = None
@@ -59,17 +59,17 @@ class ChemInfOperator(object):
     @staticmethod
     def init_model(controller):
         if controller.args.classifier == 'all':
-            from ..cheminf.models import ModelRNDFOR
-            from ..cheminf.models import ModelNN
+            from aichemy.models import ModelRNDFOR
+            from aichemy.models import ModelNN
             models = [ModelRNDFOR(controller), ModelNN(controller)]
             return models
 
         elif controller.args.classifier == 'rndfor':
-            from ..cheminf.models import ModelRNDFOR
+            from aichemy.models import ModelRNDFOR
             model = ModelRNDFOR(controller)
 
         elif controller.args.classifier == 'nn':
-            from ..cheminf.models import ModelNN
+            from aichemy.models import ModelNN
             model = ModelNN(controller)
 
         else:
@@ -121,5 +121,5 @@ class ChemInfOperator(object):
 
 
 def run_operator():
-    cheminf = ChemInfOperator()
-    cheminf.run()
+    aichemy = AIchemyOperator()
+    aichemy.run()

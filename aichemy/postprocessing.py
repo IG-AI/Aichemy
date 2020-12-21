@@ -5,14 +5,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from matplotlib import font_manager
 from scipy.stats import sem
 from abc import ABCMeta, abstractmethod
 
-from ..cheminf.utils import ModeError
+from aichemy.utils import ModeError
 
 
-class ChemInfPostProc(object, metaclass=ABCMeta):
+class AIchemyPostProc(object, metaclass=ABCMeta):
     def __init__(self, controller):
         self.name = controller.args.name
         self.classifier = controller.args.classifier
@@ -58,7 +57,7 @@ class ChemInfPostProc(object, metaclass=ABCMeta):
         return getattr(self, key)
 
 
-class PostProcNormal(ChemInfPostProc):
+class PostProcNormal(AIchemyPostProc):
     def __init__(self, controller):
         super(PostProcNormal, self).__init__(controller)
         self.mode = controller.args.postproc_mode
@@ -85,7 +84,7 @@ class PostProcNormal(ChemInfPostProc):
             raise ModeError("postproc", self.mode)
 
 
-class PostProcAuto(ChemInfPostProc):
+class PostProcAuto(AIchemyPostProc):
     def __init__(self, controller):
         super(PostProcAuto, self).__init__(controller)
         self.mode = controller.args.mode
@@ -378,7 +377,7 @@ def _calibration_plots(x_arr, y_arr, title, prefix, factor, settings, error_bars
     label = " ".join(map(lambda string: string[0].upper() + string[1:], factor.split('_')))
     title_label = re.sub(r'inv_nn_(.+)', r'\g<1>', title)
     title = " ".join(map(lambda string: string[0].upper() + string[1:], title_label.split('_')))
-    fig.suptitle('ChemInf', fontweight='bold', fontsize=15, color='blue')
+    fig.suptitle('AIchemy', fontweight='bold', fontsize=15, color='blue')
     plt.title(title, fontweight='semibold', fontsize=10)
     plt.ylabel(label, fontweight='semibold', fontsize=10)
     plt.xlabel('Significance', fontweight='semibold', fontsize=10)

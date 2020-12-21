@@ -7,13 +7,13 @@ from sklearn.utils import resample
 from random import randrange
 from abc import ABCMeta, abstractmethod
 
-from ..cheminf.utils import read_dataframe, save_dataframe, shuffle_dataframe, MutuallyExclusiveError, \
+from aichemy.utils import read_dataframe, save_dataframe, shuffle_dataframe, MutuallyExclusiveError, \
     ModeError, NoMultiCoreSupportError
 
 MULTICORE_SUPPORT = ['balancing', 'sample', 'auto']
 
 # Todo: Make the provided outfile will be used correctly
-class ChemInfPreProc(object, metaclass=ABCMeta):
+class AIchemyPreProc(object, metaclass=ABCMeta):
     def __init__(self, controller):
         self.shuffle = controller.args.shuffle
         self.name = controller.args.name
@@ -190,7 +190,7 @@ class ChemInfPreProc(object, metaclass=ABCMeta):
         return getattr(self, key)
 
 
-class PreProcNormal(ChemInfPreProc):
+class PreProcNormal(AIchemyPreProc):
     def __init__(self, controller):
         super(PreProcNormal, self).__init__(controller)
         self.submode = controller.args.preproc_mode
@@ -205,7 +205,7 @@ class PreProcNormal(ChemInfPreProc):
             self._single_core(self.submode)
 
 
-class PreProcAuto(ChemInfPreProc):
+class PreProcAuto(AIchemyPreProc):
     def __init__(self, controller):
         super(PreProcAuto, self).__init__(controller)
         self.train_test_ratio = controller.config.execute.train_test_ratio

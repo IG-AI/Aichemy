@@ -1,5 +1,4 @@
 import random
-import sys
 from abc import ABC
 from copy import copy
 
@@ -10,7 +9,7 @@ from torch.nn import Module as NNModule
 
 CLASSIFIER_TYPES = ['rndfor', 'nn']
 
-class ChemInfClassifier(object):
+class AIchemyClassifier(object):
     def __init__(self, classifier_type, config):
         self.type = classifier_type
         self.config = config

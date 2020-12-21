@@ -1,11 +1,10 @@
 import configparser
 import argparse
 import os
-import re
 from datetime import datetime
 
-from ..cheminf.classifiers import CLASSIFIER_TYPES
-from ..cheminf.utils import ModeError
+from aichemy.classifiers import CLASSIFIER_TYPES
+from aichemy.utils import ModeError
 
 MODEL_MODES = ['build', 'improve', 'predict', 'validate']
 DATA_MODES = ['postproc', 'preproc']
@@ -21,7 +20,7 @@ PYTORCH_OPTIMIZERS = ['Adam', 'AdamW', 'Adamax', 'RMSprop', 'SGD', 'Adagrad', 'A
 TORCHTOOLS_OPTIMIZERS = ['RangerLars']
 
 
-class ChemInfPref(object):
+class AIchemyPref(object):
     def __init__(self, config_file):
         self.args = self.argument_parser()
         for flag in OCCASIONAL_FLAGS:
@@ -31,7 +30,7 @@ class ChemInfPref(object):
         for mode in SUBMODES:
             if not hasattr(self.args, mode):
                 setattr(self.args, mode, None)
-        self.config = ChemInfConfig(self.args.mode, self.args.classifier, config_file, self.args.override_config)
+        self.config = AIchemyConfig(self.args.mode, self.args.classifier, config_file, self.args.override_config)
 
     @staticmethod
     def argument_parser():
@@ -39,11 +38,11 @@ class ChemInfPref(object):
             and the name of the file to be outputted from the script.
         """
 
-        parser = argparse.ArgumentParser(prog="cheminf")
+        parser = argparse.ArgumentParser(prog="aichemy")
 
-        parser.add_argument('--version', action='version', version='ChemInf Version 0.2')
+        parser.add_argument('--version', action='version', version='AIchemy Version 0.2')
 
-        parser_command = parser.add_subparsers(help="Choose a submode to run cheminf in", dest='mode')
+        parser_command = parser.add_subparsers(help="Choose a submode to run aichemy in", dest='mode')
 
         parser_auto = parser_command.add_parser('auto',
                                                 help="Automatic submode that preforms a complete data analysis of a "
@@ -205,7 +204,7 @@ class ChemInfPref(object):
         return args
 
 
-class ChemInfConfig(object):
+class AIchemyConfig(object):
     def __init__(self, operator_mode, classifier_type, config_files, overrider):
         self.clf_conf_file = config_files[0]
         self.exec_conf_file = config_files[1]
@@ -317,7 +316,7 @@ class ConfigExec(object):
             self.balancing_ratio = float(config['preproc']['balancing_ratio'])
 
 
-class ChemInfController(ChemInfPref):
+class AIchemyController(AIchemyPref):
     model_modes = MODEL_MODES
     data_modes = DATA_MODES
     auto_modes = AUTO_MODES
@@ -341,7 +340,7 @@ class ChemInfController(ChemInfPref):
         self.src_dir = os.path.dirname(package_dir)
 
         config_files = [f"{self.src_dir}/config/classifiers.ini", f"{self.src_dir}/config/execute.ini"]
-        super(ChemInfController, self).__init__(config_files)
+        super(AIchemyController, self).__init__(config_files)
 
         self.update_infiles()
         self.add_project_dir()
@@ -369,7 +368,7 @@ class ChemInfController(ChemInfPref):
                 self.args.infile = infile
             else:
                 raise FileNotFoundError(f"Couldn't find the input file, both absolut path and file name in the "
-                                        f"data directory in the ChemInf source directory ({self.src_dir}/data) has "
+                                        f"data directory in the AIchemy source directory ({self.src_dir}/data) has "
                                         f"been explored")
 
         elif self.args.postproc_mode == 'plot':

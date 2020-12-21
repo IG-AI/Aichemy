@@ -1,4 +1,4 @@
-name: ChemInf
+name: AIchemy
 channels:
   - rdkit
   - pytorch
