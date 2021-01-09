@@ -2,4 +2,6 @@ include README.md
 include aichemy/*
 include config/*
 include data/
-include aichemy.toml
+include pyproject.toml
+include setup.*
+include requirements.txt

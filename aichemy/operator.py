@@ -90,7 +90,7 @@ class AIchemyOperator(object):
         return getattr(self, utils)
 
     # Todo: Make classifier option 'all' functional
-    def run(self):
+    def start(self):
         if self.classifier:
             if self.classifier == 'all':
                 classifiers = self.controller.classifier_types
@@ -106,7 +106,7 @@ class AIchemyOperator(object):
                 model.predict()
 
         if self.mode == 'postproc' or self.mode in self.controller.auto_modes:
-            self.postproc.run()
+            self.postproc.start()
 
         elif self.mode == 'preproc':
             self.preproc.run()
@@ -120,6 +120,6 @@ class AIchemyOperator(object):
             raise ModeError('operator', self.mode)
 
 
-def run_operator():
+def start_operator():
     aichemy = AIchemyOperator()
-    aichemy.run()
+    aichemy.start()
